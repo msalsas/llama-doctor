@@ -20,7 +20,12 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
                                                                 Impact.MEDIUM, "--parallel"),)))
     n_ctx = ctx.props.n_ctx if ctx.props else None
     n_tokens_max = metrics.n_tokens_max
-    evaluable = n_ctx is not None and n_tokens_max is not None
+    evaluable = (
+        n_ctx is not None
+        and n_tokens_max is not None
+        and math.isfinite(n_ctx)
+        and math.isfinite(n_tokens_max)
+    )
     if evaluable and n_ctx >= 16384 and n_tokens_max / n_ctx < 0.25:
         suggested = max(4096, math.ceil(2 * n_tokens_max / 4096) * 4096)
         impact = Impact.HIGH if is_cpu_bound(ctx) is True else Impact.MEDIUM

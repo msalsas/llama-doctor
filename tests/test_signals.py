@@ -1,3 +1,4 @@
+import math
 import unittest
 
 from llama_doctor.analysis.signals import decode_rate, is_cpu_bound, prefill_rate
@@ -34,6 +35,12 @@ class TestSignals(unittest.TestCase):
         context = make_context(probe=ProbeResult(150.0, 100.0, 1200, 10, 0.0))
         self.assertTrue(is_cpu_bound(context))
         self.assertEqual(decode_rate(context).source, "probe")
+
+    def test_cpu_bound_ignores_non_positive_or_non_finite_decode_rate(self):
+        for value in (0.0, -1.0, math.inf, math.nan):
+            with self.subTest(decode_tps=value):
+                context = make_context(probe=ProbeResult(150.0, value, 1200, 10, 0.0))
+                self.assertFalse(is_cpu_bound(context))
 
 
 if __name__ == "__main__":

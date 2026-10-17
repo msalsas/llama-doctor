@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 from .base import DiagnosisContext
@@ -40,4 +41,6 @@ def is_cpu_bound(ctx: DiagnosisContext) -> bool | None:
     if prefill.value < CPU_BOUND_PREFILL_TPS:
         return True
     decode = decode_rate(ctx)
-    return decode is not None and prefill.value / decode.value < MIN_PREFILL_DECODE_RATIO
+    if decode is None or not math.isfinite(decode.value) or decode.value <= 0:
+        return False
+    return prefill.value / decode.value < MIN_PREFILL_DECODE_RATIO

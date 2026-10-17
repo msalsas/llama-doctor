@@ -1,3 +1,4 @@
+import math
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
@@ -21,10 +22,20 @@ def recommendation_to_dict(recommendation: Recommendation) -> dict[str, Any]:
             "impact": recommendation.impact.name.lower(), "flag": recommendation.flag}
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, Mapping):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 def finding_to_dict(finding: Finding) -> dict[str, Any]:
     return {"analyzer": finding.analyzer_id, "code": finding.code,
             "severity": severity_name(finding.severity), "title": finding.title,
-            "detail": finding.detail, "evidence": dict(finding.evidence),
+            "detail": finding.detail, "evidence": _json_safe(finding.evidence),
             "recommendations": [recommendation_to_dict(item) for item in finding.recommendations]}
 
 
@@ -37,11 +48,7 @@ def report_to_dict(report: Report) -> dict[str, Any]:
 def _snapshot_to_dict(snapshot: Any) -> dict[str, Any] | None:
     if snapshot is None:
         return None
-    value = asdict(snapshot)
-    for key, item in value.items():
-        if isinstance(item, tuple):
-            value[key] = list(item)
-    return value
+    return _json_safe(asdict(snapshot))
 
 
 def props_to_dict(props: PropsSnapshot | None) -> dict[str, Any] | None:
@@ -57,10 +64,10 @@ def rates_to_dict(metrics: MetricsSnapshot | None) -> dict[str, float | None]:
             "kv_usage_ratio", "n_tokens_max")
     if metrics is None:
         return {key: None for key in keys}
-    return {"prefill_tps": metrics.prefill_tps, "decode_tps": metrics.decode_tps,
+    return _json_safe({"prefill_tps": metrics.prefill_tps, "decode_tps": metrics.decode_tps,
             "cache_hit_ratio": metrics.cache_hit_ratio, "avg_draft_len": metrics.avg_draft_len,
             "draft_acceptance": metrics.draft_acceptance, "kv_usage_ratio": metrics.kv_cache_usage_ratio,
-            "n_tokens_max": metrics.n_tokens_max}
+            "n_tokens_max": metrics.n_tokens_max})
 
 
 def probe_to_dict(probe: ProbeResult | None) -> dict[str, Any] | None:
