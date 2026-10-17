@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>llama-doctor</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-main">
+      <strong class="product">llama-doctor</strong>
+      <span id="hdr-target">-</span>
+      <span id="overall-badge" class="badge sev-insufficient_data">INSUFFICIENT DATA</span>
+      <span id="updated-at">no data yet</span>
+    </div>
+    <dl class="model-strip">
+      <div><dt>model</dt><dd id="hdr-model">-</dd></div>
+      <div><dt>quant</dt><dd id="hdr-quant">-</dd></div>
+      <div><dt>context</dt><dd id="hdr-ctx">-</dd></div>
+      <div><dt>slots</dt><dd id="hdr-slots">-</dd></div>
+      <div><dt>build</dt><dd id="hdr-build">-</dd></div>
+    </dl>
+  </header>
+  <main>
+    <p id="conn-banner" class="connection hidden" role="status"></p>
+    <section class="tiles" aria-label="Live statistics">
+      <article id="tile-decode" class="tile"></article>
+      <article id="tile-prefill" class="tile"></article>
+      <article id="tile-cache" class="tile"></article>
+      <article id="tile-kv" class="tile"></article>
+    </section>
+    <section class="dashboard-grid">
+      <article class="panel">
+        <h2>Decode throughput</h2>
+        <div class="chart-wrap"><canvas id="chart-decode" aria-label="Decode throughput in tokens per second" role="img"></canvas></div>
+        <details><summary>Recent decode points</summary><div class="table-wrap" data-table="decode"></div></details>
+      </article>
+      <article class="panel">
+        <h2>Prefill throughput</h2>
+        <div class="chart-wrap"><canvas id="chart-prefill" aria-label="Prefill throughput in tokens per second" role="img"></canvas></div>
+        <details><summary>Recent prefill points</summary><div class="table-wrap" data-table="prefill"></div></details>
+      </article>
+      <article class="panel">
+        <h2>KV and prefix cache</h2>
+        <div class="chart-wrap"><canvas id="chart-kv-cache" aria-label="KV usage and prefix cache hit percentages" role="img"></canvas></div>
+        <details><summary>Recent KV and cache points</summary><div class="table-wrap" data-table="kv-cache"></div></details>
+      </article>
+      <article class="panel speculative">
+        <h2>Speculative decoding</h2>
+        <div class="chart-wrap"><canvas id="chart-draft-len" aria-label="Average draft length in tokens" role="img"></canvas></div>
+        <div class="chart-wrap"><canvas id="chart-acceptance" aria-label="Draft acceptance percentage" role="img"></canvas></div>
+        <details><summary>Recent speculative-decoding points</summary><div class="table-wrap" data-table="speculative"></div></details>
+      </article>
+      <article class="panel findings-panel">
+        <h2>Findings</h2>
+        <div id="findings-list"></div>
+        <h3>Recommendations</h3>
+        <ol id="recs-list"></ol>
+        <details>
+          <summary>0 checks skipped (insufficient data)</summary>
+          <ul id="skipped-list"></ul>
+        </details>
+      </article>
+    </section>
+  </main>
+  <script src="/static/vendor/chart.umd.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

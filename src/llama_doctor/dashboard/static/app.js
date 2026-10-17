@@ -1,0 +1,315 @@
+(() => {
+  "use strict";
+
+  const rootStyle = getComputedStyle(document.documentElement);
+  const color = (name) => rootStyle.getPropertyValue(name).trim();
+  const byId = (id) => document.getElementById(id);
+  const colors = {
+    grid: color("--grid"), tick: color("--text-3"), decode: color("--s-decode"),
+    prefill: color("--s-prefill"), kv: color("--s-kv"), cache: color("--s-cache"),
+    draft: color("--s-draft"), acceptance: color("--s-accept")
+  };
+  let lastState = null;
+  let retryDelay = 2000;
+
+  function number(value) {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  function text(value, fallback = "-") {
+    return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
+  }
+
+  function rate(value) {
+    const valueNumber = number(value);
+    return valueNumber === null ? "n/a" : valueNumber.toFixed(1);
+  }
+
+  function percent(value) {
+    const valueNumber = number(value);
+    return valueNumber === null ? "n/a" : `${(valueNumber * 100).toFixed(1)} %`;
+  }
+
+  function draft(value) {
+    const valueNumber = number(value);
+    return valueNumber === null ? "n/a" : valueNumber.toFixed(2);
+  }
+
+  function timeLabel(value) {
+    const valueNumber = number(value);
+    return valueNumber === null ? "-" : new Date(valueNumber * 1000).toLocaleTimeString([], {
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+    });
+  }
+
+  function severityLabel(severity) {
+    return {
+      critical: "CRIT", warn: "WARN", info: "INFO", ok: "OK",
+      insufficient_data: "INSUFFICIENT DATA"
+    }[severity] || "INSUFFICIENT DATA";
+  }
+
+  function append(parent, tag, value, className) {
+    const element = document.createElement(tag);
+    element.textContent = value;
+    if (className) {
+      element.className = className;
+    }
+    parent.append(element);
+    return element;
+  }
+
+  function lineChart(canvasId, datasets, percentScale) {
+    return new Chart(byId(canvasId), {
+      type: "line",
+      data: { labels: [], datasets },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false, spanGaps: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: canvasId === "chart-kv-cache" },
+          tooltip: {
+            callbacks: {
+              label(context) {
+                const value = context.parsed.y;
+                const unit = context.dataset.unit;
+                return `${context.dataset.label}: ${value === null ? "n/a" : value.toFixed(unit === "tokens" ? 2 : 1)} ${unit}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: colors.grid }, ticks: { color: colors.tick } },
+          y: {
+            beginAtZero: true, max: percentScale ? 100 : undefined,
+            grid: { color: colors.grid }, ticks: { color: colors.tick }
+          }
+        },
+        elements: { line: { borderWidth: 2, tension: 0 }, point: { radius: 0, hoverRadius: 4 } }
+      }
+    });
+  }
+
+  const charts = {
+    decode: lineChart("chart-decode", [{ label: "Decode", data: [], borderColor: colors.decode, unit: "tok/s" }], false),
+    prefill: lineChart("chart-prefill", [{ label: "Prefill", data: [], borderColor: colors.prefill, unit: "tok/s" }], false),
+    kvCache: lineChart("chart-kv-cache", [
+      { label: "KV usage", data: [], borderColor: colors.kv, unit: "%" },
+      { label: "Prefix-cache hit", data: [], borderColor: colors.cache, unit: "%" }
+    ], true),
+    draft: lineChart("chart-draft-len", [{ label: "Draft length", data: [], borderColor: colors.draft, unit: "tokens" }], false),
+    acceptance: lineChart("chart-acceptance", [{ label: "Acceptance", data: [], borderColor: colors.acceptance, unit: "%" }], true)
+  };
+
+  function historyOf(state) {
+    return Array.isArray(state.history) ? state.history : [];
+  }
+
+  function updateChart(chart, history, fields) {
+    chart.data.labels = history.map((point) => timeLabel(point.t));
+    fields.forEach((field, index) => {
+      chart.data.datasets[index].data = history.map((point) => {
+        const value = number(point[field]);
+        return fields[index].includes("ratio") || fields[index] === "draft_acceptance"
+          ? value === null ? null : value * 100
+          : value;
+      });
+    });
+    chart.update("none");
+  }
+
+  function updateCharts(history) {
+    updateChart(charts.decode, history, ["decode_tps"]);
+    updateChart(charts.prefill, history, ["prefill_tps"]);
+    updateChart(charts.kvCache, history, ["kv_usage_ratio", "cache_hit_ratio"]);
+    updateChart(charts.draft, history, ["avg_draft_len"]);
+    updateChart(charts.acceptance, history, ["draft_acceptance"]);
+  }
+
+  function latest(history, field) {
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const value = number(history[index][field]);
+      if (value !== null) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function renderTile(id, label, live, lifetime, formatter) {
+    const tile = byId(id);
+    tile.replaceChildren();
+    append(tile, "div", label, "tile-label");
+    const hero = live === null ? lifetime : live;
+    append(tile, "div", formatter(hero), "hero");
+    append(tile, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
+  }
+
+  function updateTiles(state, history) {
+    const lifetime = state.lifetime && typeof state.lifetime === "object" ? state.lifetime : {};
+    renderTile("tile-decode", "Decode tok/s", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
+    renderTile("tile-prefill", "Prefill tok/s", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
+    renderTile("tile-cache", "Prefix-cache hit", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
+    renderTile("tile-kv", "KV usage", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent);
+  }
+
+  function updateHeader(state) {
+    const server = state.server && typeof state.server === "object" ? state.server : {};
+    byId("hdr-target").textContent = text(state.target);
+    byId("hdr-model").textContent = text(server.model_name);
+    byId("hdr-quant").textContent = text(server.quant);
+    byId("hdr-ctx").textContent = text(server.n_ctx);
+    byId("hdr-slots").textContent = text(server.total_slots);
+    byId("hdr-build").textContent = text(server.build_info);
+    const report = state.report && typeof state.report === "object" ? state.report : null;
+    const severity = report && typeof report.overall === "string" ? report.overall : "insufficient_data";
+    const badge = byId("overall-badge");
+    badge.textContent = severityLabel(severity);
+    badge.className = `badge sev-${severity}`;
+  }
+
+  function updateUpdatedAt() {
+    const target = byId("updated-at");
+    const timestamp = lastState && number(lastState.updated_at);
+    if (timestamp === null) {
+      target.textContent = "no data yet";
+      return;
+    }
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
+    target.textContent = `updated ${seconds} s ago`;
+  }
+
+  function updateTable(container, history, fields) {
+    container.replaceChildren();
+    const table = document.createElement("table");
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["time", ...fields.map((item) => item.label)].forEach((label) => append(headRow, "th", label));
+    head.append(headRow);
+    table.append(head);
+    const body = document.createElement("tbody");
+    history.slice(-20).forEach((point) => {
+      const row = document.createElement("tr");
+      append(row, "td", timeLabel(point.t));
+      fields.forEach((item) => append(row, "td", item.format(number(point[item.key]))));
+      body.append(row);
+    });
+    table.append(body);
+    container.append(table);
+  }
+
+  function updateTables(history) {
+    const table = (key, fields) => updateTable(document.querySelector(`[data-table="${key}"]`), history, fields);
+    table("decode", [{ label: "tok/s", key: "decode_tps", format: rate }]);
+    table("prefill", [{ label: "tok/s", key: "prefill_tps", format: rate }]);
+    table("kv-cache", [
+      { label: "KV usage", key: "kv_usage_ratio", format: percent },
+      { label: "Prefix-cache hit", key: "cache_hit_ratio", format: percent }
+    ]);
+    table("speculative", [
+      { label: "draft tokens", key: "avg_draft_len", format: draft },
+      { label: "acceptance", key: "draft_acceptance", format: percent }
+    ]);
+  }
+
+  function updateFindings(state) {
+    const report = state.report && typeof state.report === "object" ? state.report : {};
+    const findings = Array.isArray(report.findings) ? report.findings : [];
+    const visible = findings.filter((item) => item && item.severity !== "ok" && item.severity !== "insufficient_data");
+    const skipped = findings.filter((item) => item && item.severity === "insufficient_data");
+    const passed = findings.filter((item) => item && item.severity === "ok");
+    const list = byId("findings-list");
+    list.replaceChildren();
+    visible.forEach((finding) => {
+      const row = document.createElement("article");
+      row.className = "finding";
+      const heading = document.createElement("div");
+      heading.className = "finding-heading";
+      const severity = typeof finding.severity === "string" ? finding.severity : "info";
+      append(heading, "span", severityLabel(severity), `badge sev-${severity}`);
+      append(heading, "code", text(finding.code));
+      append(heading, "strong", text(finding.title));
+      row.append(heading);
+      append(row, "p", text(finding.detail));
+      if (finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)) {
+        const evidence = document.createElement("ul");
+        evidence.className = "evidence";
+        Object.entries(finding.evidence).forEach(([key, value]) => append(evidence, "li", `${key} ${text(value, "n/a")}`));
+        row.append(evidence);
+      }
+      list.append(row);
+    });
+    const recs = byId("recs-list");
+    recs.replaceChildren();
+    (Array.isArray(report.recommendations) ? report.recommendations : []).forEach((recommendation) => {
+      const item = document.createElement("li");
+      item.className = "recommendation";
+      const impact = typeof recommendation.impact === "string" ? recommendation.impact : "low";
+      append(item, "span", impact.toUpperCase(), `impact impact-${impact}`);
+      append(item, "span", text(recommendation.action));
+      append(item, "code", ` ${text(recommendation.flag)}`);
+      append(item, "p", text(recommendation.rationale));
+      recs.append(item);
+    });
+    const skippedList = byId("skipped-list");
+    skippedList.replaceChildren();
+    skipped.forEach((finding) => append(skippedList, "li", `${text(finding.code)}: insufficient data`));
+    passed.forEach((finding) => append(skippedList, "li", `${text(finding.code)}: passed`));
+    byId("skipped-list").parentElement.querySelector("summary").textContent = `${skipped.length} checks skipped (insufficient data)`;
+  }
+
+  function updateBanner(state) {
+    const banner = byId("conn-banner");
+    const errors = state.errors && typeof state.errors === "object" ? Object.entries(state.errors) : [];
+    if (errors.length > 0 && historyOf(state).length === 0) {
+      banner.textContent = `server unreachable: ${errors.map(([endpoint, reason]) => `${endpoint} ${text(reason)}`).join("; ")}`;
+      banner.classList.remove("hidden");
+    } else {
+      banner.classList.add("hidden");
+    }
+  }
+
+  function render(state) {
+    lastState = state;
+    const history = historyOf(state);
+    updateHeader(state);
+    updateTiles(state, history);
+    updateCharts(history);
+    updateTables(history);
+    updateFindings(state);
+    updateBanner(state);
+    updateUpdatedAt();
+  }
+
+  function disconnected() {
+    const banner = byId("conn-banner");
+    banner.textContent = "dashboard disconnected, retrying";
+    banner.classList.remove("hidden");
+  }
+
+  function poll() {
+    fetch("/api/state", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("state request failed");
+        }
+        return response.json();
+      })
+      .then((state) => {
+        if (!state || typeof state !== "object") {
+          throw new Error("invalid state");
+        }
+        retryDelay = Math.max(1, number(state.interval_s) || 2) * 1000;
+        render(state);
+        setTimeout(poll, retryDelay);
+      })
+      .catch(() => {
+        disconnected();
+        retryDelay = Math.min(retryDelay * 2, 10000);
+        setTimeout(poll, retryDelay);
+      });
+  }
+
+  setInterval(updateUpdatedAt, 1000);
+  setTimeout(poll, 2000);
+})();
