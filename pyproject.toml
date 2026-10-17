@@ -17,6 +17,9 @@ llama-doctor = "llama_doctor.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"llama_doctor.dashboard" = ["static/*", "static/vendor/*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
