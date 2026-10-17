@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llama-doctor"
+version = "0.1.0"
+description = "Non-invasive health diagnosis for local LLM inference servers via /metrics and /props."
+authors = [{name = "Manolo Alsas"}]
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+llama-doctor = "llama_doctor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
