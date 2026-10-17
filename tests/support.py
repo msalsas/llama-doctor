@@ -1,12 +1,48 @@
+import json
 import os
 import threading
+from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from llama_doctor.analysis.base import DiagnosisContext, HostHints
+from llama_doctor.models import (
+    EndpointError,
+    MetricsSnapshot,
+    ModelsMeta,
+    ProbeResult,
+    PropsSnapshot,
+    ServerSnapshot,
+)
+from llama_doctor.promparse import parse_prometheus
 
 
 def load_fixture(name: str) -> str:
     path = os.path.join(os.path.dirname(__file__), "fixtures", name)
     with open(path, encoding="utf-8") as handle:
         return handle.read()
+
+
+def make_context(
+    metrics: str | None = "metrics_moe_offload.txt",
+    props: str | None = "props_full.json",
+    models: str | None = "models_full.json",
+    *,
+    errors: Mapping[str, EndpointError] | None = None,
+    probe: ProbeResult | None = None,
+    hints: HostHints = HostHints(),  # noqa: B008
+) -> DiagnosisContext:
+    metric_snapshot = (
+        MetricsSnapshot.from_samples(parse_prometheus(load_fixture(metrics)), taken_at=0.0)
+        if metrics is not None
+        else None
+    )
+    props_snapshot = PropsSnapshot.from_payload(json.loads(load_fixture(props))) if props else None
+    models_snapshot = ModelsMeta.from_payload(json.loads(load_fixture(models))) if models else None
+    return DiagnosisContext(
+        ServerSnapshot(0.0, metric_snapshot, props_snapshot, models_snapshot, errors or {}),
+        probe,
+        hints,
+    )
 
 
 class FakeLlamaServer:
