@@ -2,7 +2,7 @@ import json
 import time
 import unittest
 
-from llama_doctor.dashboard.sampler import POINT_KEYS, Sampler, delta_point
+from llama_doctor.dashboard.sampler import POINT_KEYS, Sampler, _delta_rate, delta_point
 from llama_doctor.models import EndpointError, MetricsSnapshot, ServerSnapshot
 from llama_doctor.promparse import parse_prometheus
 
@@ -39,6 +39,11 @@ def _snapshot(metrics: MetricsSnapshot | None, taken_at: float = 0.0) -> ServerS
 
 
 class TestSampler(unittest.TestCase):
+    def test_delta_rate_rejects_non_finite_inputs_and_results(self):
+        self.assertIsNone(_delta_rate(float("nan"), 1.0, 0.0, 1.0))
+        self.assertIsNone(_delta_rate(0.0, float("inf"), 0.0, 1.0))
+        self.assertIsNone(_delta_rate(-1e308, 1e308, 0.0, 1.0))
+
     def test_delta_point_rates(self):
         point = delta_point(_metrics(PREVIOUS), _metrics(CURRENT), 2.0)
 

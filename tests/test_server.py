@@ -23,7 +23,11 @@ class TestServer(unittest.TestCase):
         (root / "vendor" / "chart.umd.js").write_text("chart", encoding="utf-8")
         self.state = {"answer": 42}
         self.server = make_server(lambda: self.state, port=0, static_dir=root)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever,
+            kwargs={"poll_interval": 0.05},
+            daemon=True,
+        )
         self.thread.start()
         self.port = self.server.server_address[1]
 
@@ -33,9 +37,24 @@ class TestServer(unittest.TestCase):
         self.thread.join()
         self.temp_dir.cleanup()
 
-    def _request(self, method: str, path: str, headers: dict[str, str] | None = None):
+    def _request(
+        self,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+        *,
+        skip_host: bool = False,
+    ):
         connection = http.client.HTTPConnection("127.0.0.1", self.port)
-        connection.request(method, path, headers=headers or {})
+        request_headers = headers or {}
+        connection.putrequest(
+            method,
+            path,
+            skip_host=skip_host or "Host" in request_headers,
+        )
+        for name, value in request_headers.items():
+            connection.putheader(name, value)
+        connection.endheaders()
         response = connection.getresponse()
         body = response.read()
         headers_out = dict(response.getheaders())
@@ -57,6 +76,14 @@ class TestServer(unittest.TestCase):
         self.assertEqual(headers["Content-Security-Policy"], CSP)
         self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
 
+    def test_head_returns_headers_without_body(self):
+        status, headers, body = self._request("HEAD", "/")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers["Content-Length"], str(len(b"<h1>dashboard</h1>")))
+        self.assertEqual(headers["Content-Security-Policy"], CSP)
+
     def test_static_allowlist(self):
         status, headers, _ = self._request("GET", "/static/app.js")
         self.assertEqual(status, 200)
@@ -68,6 +95,10 @@ class TestServer(unittest.TestCase):
         Path(self.temp_dir.name, "app.css").unlink()
 
         self.assertEqual(self._request("GET", "/static/app.css")[0], 404)
+
+    def test_static_read_os_error_returns_404(self):
+        with patch.object(Path, "read_bytes", side_effect=PermissionError):
+            self.assertEqual(self._request("GET", "/static/app.css")[0], 404)
 
     def test_query_string_ignored(self):
         status, _, body = self._request("GET", "/?unused=value")
@@ -81,11 +112,35 @@ class TestServer(unittest.TestCase):
             403,
         )
 
+    def test_missing_host_rejected(self):
+        self.assertEqual(self._request("GET", "/", skip_host=True)[0], 400)
+
+    def test_userinfo_host_rejected(self):
+        self.assertEqual(
+            self._request("GET", "/", {"Host": "127.0.0.1@evil"})[0],
+            403,
+        )
+
+    def test_non_numeric_port_host_rejected(self):
+        self.assertEqual(
+            self._request("GET", "/", {"Host": "localhost:evil"})[0],
+            403,
+        )
+
+    def test_decimal_ip_host_rejected(self):
+        self.assertEqual(
+            self._request("GET", "/", {"Host": "2130706433"})[0],
+            403,
+        )
+
     def test_localhost_host_allowed(self):
         self.assertEqual(
             self._request("GET", "/", {"Host": f"localhost:{self.port}"})[0],
             200,
         )
+
+    def test_uppercase_localhost_host_allowed(self):
+        self.assertEqual(self._request("GET", "/", {"Host": "LOCALHOST"})[0], 200)
 
     def test_post_405(self):
         status, headers, _ = self._request("POST", "/")
@@ -108,7 +163,11 @@ class TestServer(unittest.TestCase):
             port=0,
             static_dir=Path(self.temp_dir.name),
         )
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = threading.Thread(
+            target=self.server.serve_forever,
+            kwargs={"poll_interval": 0.05},
+            daemon=True,
+        )
         self.thread.start()
         self.port = self.server.server_address[1]
 
@@ -138,6 +197,29 @@ class TestServer(unittest.TestCase):
         finally:
             occupied.close()
         self.assertIn("cannot bind", out.getvalue())
+
+    def test_run_warns_for_non_loopback_host(self):
+        server = Mock()
+        server.serve_forever.side_effect = KeyboardInterrupt
+        sampler = Mock()
+        client = Mock()
+        client.base_url = "http://server"
+        out = Mock()
+
+        with (
+            patch("llama_doctor.dashboard.server.make_server", return_value=server),
+            patch("llama_doctor.dashboard.server.Sampler", return_value=sampler),
+        ):
+            self.assertEqual(
+                run(client, host="0.0.0.0", port=8765, interval=2.0, history=300, out=out),
+                0,
+            )
+
+        sampler.start.assert_called_once_with()
+        sampler.stop.assert_called_once_with()
+        server.server_close.assert_called_once_with()
+        out.flush.assert_called_once_with()
+        self.assertIn("warning: dashboard has no authentication", out.write.call_args_list[1].args[0])
 
     def test_cli_serve_wired(self):
         with patch("llama_doctor.dashboard.server.run", return_value=0) as dashboard_run:

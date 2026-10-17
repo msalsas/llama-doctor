@@ -38,10 +38,13 @@ def default_static_dir() -> Traversable:
 
 
 def _host_name(header: str) -> str:
-    host = header.strip()
+    host = header.strip().lower()
     if host.startswith("["):
         closing = host.find("]")
-        if closing == -1 or (host[closing + 1 :] and not host[closing + 1 :].startswith(":")):
+        suffix = host[closing + 1 :] if closing != -1 else ""
+        if closing == -1 or (
+            suffix and (not suffix.startswith(":") or not suffix[1:].isdigit())
+        ):
             return host
         return host[1:closing]
     try:
@@ -49,7 +52,10 @@ def _host_name(header: str) -> str:
         return host
     except ValueError:
         pass
-    return host.rsplit(":", 1)[0] if ":" in host else host
+    name, separator, port = host.rpartition(":")
+    if separator and port.isdigit():
+        return name
+    return host
 
 
 def make_server(
@@ -119,7 +125,7 @@ def make_server(
                 return
             try:
                 body = (root / filename).read_bytes()
-            except (FileNotFoundError, IsADirectoryError):
+            except OSError:
                 self._send(404, b"not found")
                 return
             content_type = {
@@ -176,16 +182,19 @@ def run(
         interval=interval,
         history=history,
     )
-    sampler.start()
-    out.write(f"dashboard: http://{host}:{port}/  target: {client.base_url}\n")
-    if not is_loopback(host):
-        out.write(
-            "warning: dashboard has no authentication and is reachable from the network\n"
-        )
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
+        sampler.start()
+        out.write(f"dashboard: http://{host}:{port}/  target: {client.base_url}\n")
+        if not is_loopback(host):
+            out.write(
+                "warning: dashboard has no authentication and is reachable from the network\n"
+            )
+        out.flush()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+    finally:
         sampler.stop()
         server.server_close()
-        return 0
     return 0

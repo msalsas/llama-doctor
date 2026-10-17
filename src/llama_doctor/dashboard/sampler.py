@@ -1,5 +1,6 @@
 from collections import deque
 from collections.abc import Callable, Sequence
+from math import isfinite
 from threading import Event, Lock, Thread, current_thread
 from typing import Any
 
@@ -36,11 +37,22 @@ def _delta_rate(
         or current_denominator is None
     ):
         return None
+    if not all(
+        isfinite(value)
+        for value in (
+            previous_numerator,
+            current_numerator,
+            previous_denominator,
+            current_denominator,
+        )
+    ):
+        return None
     numerator_delta = current_numerator - previous_numerator
     denominator_delta = current_denominator - previous_denominator
     if numerator_delta < 0 or denominator_delta <= 0:
         return None
-    return numerator_delta / denominator_delta
+    rate = numerator_delta / denominator_delta
+    return rate if isfinite(rate) else None
 
 
 def delta_point(
