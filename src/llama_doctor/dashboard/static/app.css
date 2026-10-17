@@ -27,6 +27,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .header, main { max-width: 1440px; margin: 0 auto; padding: 16px; }
@@ -63,11 +64,12 @@ dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .tile { padding: 16px; min-height: 102px; }
 .tile-label, .secondary { color: var(--text-2); }
 .tile-label { font-size: 0.85rem; }
-.hero { font-size: 1.7rem; font-variant-numeric: tabular-nums; margin: 8px 0 4px; }
+.hero { font-size: 1.7rem; margin: 8px 0 4px; }
 .secondary { font-size: 0.82rem; }
 
-.dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.dashboard-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .panel { padding: 16px; min-width: 0; }
+.findings-panel { grid-column: 1 / -1; }
 h2, h3 { margin: 0 0 12px; font-size: 1rem; }
 h3 { margin-top: 20px; }
 .chart-wrap { height: 220px; position: relative; }
@@ -111,9 +113,10 @@ code { font-family: ui-monospace, monospace; font-size: 0.9em; }
 #recs-list, #skipped-list { padding-left: 20px; }
 .recommendation { margin-bottom: 12px; }
 .recommendation .impact { margin-right: 8px; }
+.recommendation code { margin-left: 8px; }
 
-@media (max-width: 1099px) {
-  .dashboard-grid { grid-template-columns: 1fr; }
+@media (min-width: 1100px) {
+  .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {

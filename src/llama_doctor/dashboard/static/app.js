@@ -5,7 +5,7 @@
   const color = (name) => rootStyle.getPropertyValue(name).trim();
   const byId = (id) => document.getElementById(id);
   const colors = {
-    grid: color("--grid"), tick: color("--text-3"), decode: color("--s-decode"),
+    grid: color("--grid"), tick: color("--text-3"), legend: color("--text-2"), decode: color("--s-decode"),
     prefill: color("--s-prefill"), kv: color("--s-kv"), cache: color("--s-cache"),
     draft: color("--s-draft"), acceptance: color("--s-accept")
   };
@@ -37,9 +37,12 @@
 
   function timeLabel(value) {
     const valueNumber = number(value);
-    return valueNumber === null ? "-" : new Date(valueNumber * 1000).toLocaleTimeString([], {
-      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
-    });
+    if (valueNumber === null) {
+      return "-";
+    }
+    const date = new Date(valueNumber * 1000);
+    const pad = (part) => String(part).padStart(2, "0");
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
   function severityLabel(severity) {
@@ -47,6 +50,16 @@
       critical: "CRIT", warn: "WARN", info: "INFO", ok: "OK",
       insufficient_data: "INSUFFICIENT DATA"
     }[severity] || "INSUFFICIENT DATA";
+  }
+
+  function severityValue(value) {
+    return ["critical", "warn", "info", "ok", "insufficient_data"].includes(value)
+      ? value
+      : "insufficient_data";
+  }
+
+  function impactValue(value) {
+    return ["high", "medium", "low"].includes(value) ? value : "low";
   }
 
   function append(parent, tag, value, className) {
@@ -67,7 +80,7 @@
         animation: false, responsive: true, maintainAspectRatio: false, spanGaps: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { display: canvasId === "chart-kv-cache" },
+          legend: { display: canvasId === "chart-kv-cache", labels: { color: colors.legend } },
           tooltip: {
             callbacks: {
               label(context) {
@@ -94,8 +107,8 @@
     decode: lineChart("chart-decode", [{ label: "Decode", data: [], borderColor: colors.decode, unit: "tok/s" }], false),
     prefill: lineChart("chart-prefill", [{ label: "Prefill", data: [], borderColor: colors.prefill, unit: "tok/s" }], false),
     kvCache: lineChart("chart-kv-cache", [
-      { label: "KV usage", data: [], borderColor: colors.kv, unit: "%" },
-      { label: "Prefix-cache hit", data: [], borderColor: colors.cache, unit: "%" }
+      { label: "KV usage", data: [], borderColor: colors.kv, backgroundColor: colors.kv, unit: "%" },
+      { label: "Prefix-cache hit", data: [], borderColor: colors.cache, backgroundColor: colors.cache, unit: "%" }
     ], true),
     draft: lineChart("chart-draft-len", [{ label: "Draft length", data: [], borderColor: colors.draft, unit: "tokens" }], false),
     acceptance: lineChart("chart-acceptance", [{ label: "Acceptance", data: [], borderColor: colors.acceptance, unit: "%" }], true)
@@ -162,7 +175,7 @@
     byId("hdr-slots").textContent = text(server.total_slots);
     byId("hdr-build").textContent = text(server.build_info);
     const report = state.report && typeof state.report === "object" ? state.report : null;
-    const severity = report && typeof report.overall === "string" ? report.overall : "insufficient_data";
+    const severity = severityValue(report && report.overall);
     const badge = byId("overall-badge");
     badge.textContent = severityLabel(severity);
     badge.className = `badge sev-${severity}`;
@@ -198,26 +211,36 @@
     container.append(table);
   }
 
-  function updateTables(history) {
-    const table = (key, fields) => updateTable(document.querySelector(`[data-table="${key}"]`), history, fields);
-    table("decode", [{ label: "tok/s", key: "decode_tps", format: rate }]);
-    table("prefill", [{ label: "tok/s", key: "prefill_tps", format: rate }]);
-    table("kv-cache", [
+  const tableFields = {
+    decode: [{ label: "tok/s", key: "decode_tps", format: rate }],
+    prefill: [{ label: "tok/s", key: "prefill_tps", format: rate }],
+    "kv-cache": [
       { label: "KV usage", key: "kv_usage_ratio", format: percent },
       { label: "Prefix-cache hit", key: "cache_hit_ratio", format: percent }
-    ]);
-    table("speculative", [
+    ],
+    speculative: [
       { label: "draft tokens", key: "avg_draft_len", format: draft },
       { label: "acceptance", key: "draft_acceptance", format: percent }
-    ]);
+    ]
+  };
+
+  function updateTableIfOpen(key, history) {
+    const container = document.querySelector(`[data-table="${key}"]`);
+    if (container.closest("details").open) {
+      updateTable(container, history, tableFields[key]);
+    }
+  }
+
+  function updateTables(history) {
+    Object.keys(tableFields).forEach((key) => updateTableIfOpen(key, history));
   }
 
   function updateFindings(state) {
     const report = state.report && typeof state.report === "object" ? state.report : {};
     const findings = Array.isArray(report.findings) ? report.findings : [];
-    const visible = findings.filter((item) => item && item.severity !== "ok" && item.severity !== "insufficient_data");
-    const skipped = findings.filter((item) => item && item.severity === "insufficient_data");
-    const passed = findings.filter((item) => item && item.severity === "ok");
+    const visible = findings.filter((item) => item && !["ok", "insufficient_data"].includes(severityValue(item.severity)));
+    const skipped = findings.filter((item) => item && severityValue(item.severity) === "insufficient_data");
+    const passed = findings.filter((item) => item && severityValue(item.severity) === "ok");
     const list = byId("findings-list");
     list.replaceChildren();
     visible.forEach((finding) => {
@@ -225,7 +248,7 @@
       row.className = "finding";
       const heading = document.createElement("div");
       heading.className = "finding-heading";
-      const severity = typeof finding.severity === "string" ? finding.severity : "info";
+      const severity = severityValue(finding.severity);
       append(heading, "span", severityLabel(severity), `badge sev-${severity}`);
       append(heading, "code", text(finding.code));
       append(heading, "strong", text(finding.title));
@@ -244,10 +267,12 @@
     (Array.isArray(report.recommendations) ? report.recommendations : []).forEach((recommendation) => {
       const item = document.createElement("li");
       item.className = "recommendation";
-      const impact = typeof recommendation.impact === "string" ? recommendation.impact : "low";
+      const impact = impactValue(recommendation.impact);
       append(item, "span", impact.toUpperCase(), `impact impact-${impact}`);
       append(item, "span", text(recommendation.action));
-      append(item, "code", ` ${text(recommendation.flag)}`);
+      if (recommendation.flag !== null) {
+        append(item, "code", text(recommendation.flag));
+      }
       append(item, "p", text(recommendation.rationale));
       recs.append(item);
     });
@@ -299,8 +324,13 @@
         if (!state || typeof state !== "object") {
           throw new Error("invalid state");
         }
-        retryDelay = Math.max(1, number(state.interval_s) || 2) * 1000;
-        render(state);
+        const interval = number(state.interval_s);
+        retryDelay = interval === null ? 2000 : interval * 1000;
+        try {
+          render(state);
+        } catch (error) {
+          console.error("dashboard render failed", error);
+        }
         setTimeout(poll, retryDelay);
       })
       .catch(() => {
@@ -310,6 +340,15 @@
       });
   }
 
+  Object.entries(tableFields).forEach(([key]) => {
+    const container = document.querySelector(`[data-table="${key}"]`);
+    container.closest("details").addEventListener("toggle", (event) => {
+      if (event.currentTarget.open && lastState) {
+        updateTableIfOpen(key, historyOf(lastState));
+      }
+    });
+  });
+
   setInterval(updateUpdatedAt, 1000);
-  setTimeout(poll, 2000);
+  poll();
 })();
