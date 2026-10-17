@@ -1,3 +1,4 @@
+import http.client
 import json
 import time
 import urllib.error
@@ -33,6 +34,8 @@ class FetchError(Exception):
 
 
 def normalize_base_url(url: str) -> str:
+    if "?" in url or "#" in url:
+        raise ValueError("base URL must not contain '?' or '#'")
     cleaned = url.strip().rstrip("/")
     parsed = urllib.parse.urlsplit(cleaned)
     if parsed.scheme not in ("http", "https"):
@@ -41,8 +44,12 @@ def normalize_base_url(url: str) -> str:
         raise ValueError("base URL must include a host")
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("base URL must not include userinfo")
-    if parsed.query or parsed.fragment:
-        raise ValueError("base URL must not include a query or fragment")
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ValueError("base URL port must be digits only") from None
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError("base URL port must be between 1 and 65535")
     return cleaned
 
 
@@ -86,6 +93,7 @@ class LlamaClient:
             with self._opener.open(request, timeout=self._timeout) as response:
                 body = response.read(MAX_BODY_BYTES + 1)
         except urllib.error.HTTPError as exc:
+            exc.close()
             raise FetchError(path, f"HTTP {exc.code}", status=exc.code) from None
         except urllib.error.URLError as exc:
             if isinstance(exc.reason, TimeoutError):
@@ -95,17 +103,23 @@ class LlamaClient:
             raise FetchError(path, "unreachable") from None
         except TimeoutError:
             raise FetchError(path, "timed out") from None
+        except http.client.HTTPException:
+            raise FetchError(path, "invalid response") from None
+        except (OverflowError, RecursionError):
+            raise FetchError(path, "invalid response") from None
         except OSError:
             raise FetchError(path, "unreachable") from None
         if len(body) > MAX_BODY_BYTES:
-            raise FetchError(path, "response too large") from None
+            raise FetchError(path, "response too large")
         return body
 
-    def _fetch_json(self, path: str) -> Any:
+    def _fetch_json(self, path: str, data: bytes | None = None) -> Any:
         try:
-            return json.loads(self._fetch_bytes(path))
+            return json.loads(self._fetch_bytes(path, data))
         except ValueError:
             raise FetchError(path, "invalid JSON") from None
+        except RecursionError:
+            raise FetchError(path, "invalid response") from None
 
     def fetch_metrics(self) -> MetricsSnapshot:
         body = self._fetch_bytes("/metrics")
@@ -155,16 +169,12 @@ class LlamaClient:
             "temperature": 0,
             "stream": False,
         }
-        raw = self._fetch_bytes(
+        decoded = self._fetch_json(
             "/completion", data=json.dumps(payload).encode("utf-8")
         )
-        try:
-            decoded = json.loads(raw)
-        except ValueError:
-            raise FetchError("/completion", "invalid JSON") from None
         timings = decoded.get("timings") if isinstance(decoded, dict) else None
         if not isinstance(timings, dict):
-            raise FetchError("/completion", "no timings in response") from None
+            raise FetchError("/completion", "no timings in response")
         return CompletionTimings(
             prompt_n=safe_int(timings.get("prompt_n")),
             prompt_ms=safe_float(timings.get("prompt_ms")),

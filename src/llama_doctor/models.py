@@ -76,7 +76,7 @@ class MetricsSnapshot:
             if raw is None or not math.isfinite(raw) or raw < 0:
                 fields[field_name] = None
             else:
-                fields[field_name] = float(raw)
+                fields[field_name] = raw
         return cls(taken_at=taken_at, **fields)
 
     @property
@@ -140,14 +140,17 @@ class PropsSnapshot:
             return cls(missing=PROPS_KEYS)
         marker = payload.get("media_marker")
         forbidden = (marker,) if isinstance(marker, str) else ()
-        model_path = safe_str(payload.get("model_path"), forbidden=forbidden)
+        raw_path = payload.get("model_path")
         model_name = None
         quant = None
         is_moe = None
-        if model_path is not None:
-            model_name = model_path.replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".gguf")
-            quant = parse_quant(model_name)
-            is_moe = guess_moe(model_name)
+        if isinstance(raw_path, str):
+            base = raw_path.replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".gguf")
+            if base.strip():
+                model_name = safe_str(base, forbidden=forbidden)
+                if model_name is not None:
+                    quant = parse_quant(model_name)
+                    is_moe = guess_moe(model_name)
         modalities = payload.get("modalities")
         has_vision = None
         if isinstance(modalities, dict):
@@ -166,17 +169,12 @@ class PropsSnapshot:
         n_threads = safe_int(payload.get("n_threads"))
         cache_type_k = safe_str(payload.get("cache_type_k"), forbidden=forbidden)
         cache_type_v = safe_str(payload.get("cache_type_v"), forbidden=forbidden)
-        values = {
-            "model_path": model_name,
-            "n_ctx": n_ctx,
-            "total_slots": total_slots,
-            "build_info": build_info,
-            "n_gpu_layers": n_gpu_layers,
-            "n_threads": n_threads,
-            "cache_type_k": cache_type_k,
-            "cache_type_v": cache_type_v,
-            "modalities": has_vision,
-        }
+        missing = tuple(
+            key
+            for key in PROPS_KEYS
+            if key not in payload
+            and not (key == "n_ctx" and isinstance(defaults, dict) and "n_ctx" in defaults)
+        )
         return cls(
             model_name=model_name,
             quant=quant,
@@ -189,7 +187,7 @@ class PropsSnapshot:
             cache_type_v=cache_type_v,
             has_vision=has_vision,
             is_moe=is_moe,
-            missing=tuple(key for key in PROPS_KEYS if values[key] is None),
+            missing=missing,
         )
 
 

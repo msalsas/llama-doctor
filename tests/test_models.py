@@ -136,6 +136,58 @@ class TestPropsSnapshot(unittest.TestCase):
         self.assertEqual(PropsSnapshot.from_payload(None), expected)
         self.assertEqual(PropsSnapshot.from_payload(["not", "a", "dict"]), expected)
 
+    def test_props_basename_from_long_hf_path(self):
+        payload = {
+            "model_path": (
+                "/home/u/.cache/huggingface/hub/"
+                "models--unsloth--Qwen3-30B-A3B-GGUF/snapshots/"
+                "d1e2f3a4b5c6098f0e7d6c5b4a3210fedcba9876543210/"
+                "Qwen3-30B-A3B-UD-Q4_K_XL.gguf"
+            )
+        }
+        self.assertGreater(len(payload["model_path"]), 128)
+        snap = PropsSnapshot.from_payload(payload)
+        self.assertEqual(snap.model_name, "Qwen3-30B-A3B-UD-Q4_K_XL")
+        self.assertEqual(snap.quant, "UD-Q4_K_XL")
+
+    def test_props_whitespace_basename_is_none(self):
+        snap = PropsSnapshot.from_payload({"model_path": "   .gguf"})
+        self.assertIsNone(snap.model_name)
+        self.assertIsNone(snap.quant)
+        self.assertIsNone(snap.is_moe)
+
+    def test_props_marker_after_padding_not_missing(self):
+        marker = "<__media_SENTINEL__>"
+        payload = {
+            "model_path": "Qwen3-30B-A3B-Q4_K_M.gguf",
+            "build_info": "x" * 120 + marker,
+            "media_marker": marker,
+        }
+        snap = PropsSnapshot.from_payload(payload)
+        self.assertIsNone(snap.build_info)
+        self.assertNotIn("build_info", snap.missing)
+        self.assertNotIn("SENTINEL", repr(snap))
+        self.assertEqual(
+            snap.missing,
+            ("n_ctx", "total_slots", "n_gpu_layers", "n_threads", "cache_type_k", "cache_type_v", "modalities"),
+        )
+
+    def test_props_present_but_invalid_not_missing(self):
+        payload = {
+            "model_path": "m.gguf",
+            "n_ctx": "not-a-number",
+            "modalities": {"vision": "yes"},
+        }
+        snap = PropsSnapshot.from_payload(payload)
+        self.assertIsNone(snap.n_ctx)
+        self.assertIsNone(snap.has_vision)
+        self.assertNotIn("n_ctx", snap.missing)
+        self.assertNotIn("modalities", snap.missing)
+        self.assertEqual(
+            snap.missing,
+            ("total_slots", "build_info", "n_gpu_layers", "n_threads", "cache_type_k", "cache_type_v"),
+        )
+
 
 class TestQuantAndMoe(unittest.TestCase):
     def test_parse_quant(self):

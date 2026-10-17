@@ -1,5 +1,6 @@
 import json
 import socket
+import threading
 import unittest
 
 from llama_doctor.client import FetchError, LlamaClient, normalize_base_url
@@ -8,13 +9,60 @@ from llama_doctor.redact import Secret
 from .support import FakeLlamaServer, load_fixture
 
 
+class _RawResponseServer:
+    def __init__(self, response: bytes) -> None:
+        self._response = response
+        self._stop = threading.Event()
+        self._socket = socket.socket()
+        self._socket.bind(("127.0.0.1", 0))
+        self._socket.listen(1)
+        self._port = self._socket.getsockname()[1]
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self._port}"
+
+    def close(self) -> None:
+        self._stop.set()
+        self._socket.close()
+
+    def _serve(self) -> None:
+        self._socket.settimeout(0.1)
+        while not self._stop.is_set():
+            try:
+                connection, _address = self._socket.accept()
+            except TimeoutError:
+                continue
+            except OSError:
+                return
+            with connection:
+                try:
+                    connection.recv(65536)
+                    connection.sendall(self._response)
+                except OSError:
+                    pass
+
+
 class TestNormalizeBaseUrl(unittest.TestCase):
     def test_normalize_base_url(self):
         self.assertEqual(normalize_base_url(" http://h:8080/ "), "http://h:8080")
         self.assertEqual(normalize_base_url("http://h/proxy/"), "http://h/proxy")
-        for bad in ("ftp://h", "http://u:p@h", "http://h?x=1", "h:8080"):
-            with self.subTest(url=bad), self.assertRaises(ValueError):
-                normalize_base_url(bad)
+        bad = (
+            "ftp://h",
+            "http://u:p@h",
+            "http://h?x=1",
+            "h:8080",
+            "http://h?",
+            "http://h#frag",
+            "http://h:abc",
+            "http://h:99999",
+            "http://h:0",
+        )
+        for url in bad:
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                normalize_base_url(url)
 
 
 class TestLlamaClient(unittest.TestCase):
@@ -86,6 +134,19 @@ class TestLlamaClient(unittest.TestCase):
             client.fetch_metrics()
         self.assertEqual(ctx.exception.reason, "connection refused")
         self.assertIsNone(ctx.exception.status)
+
+    def test_malformed_status_line_is_invalid_response(self):
+        server = _RawResponseServer(b"NOT-HTTP GARBAGE\r\n\r\n")
+        try:
+            client = LlamaClient(server.url)
+            with self.assertRaises(FetchError) as ctx:
+                client.fetch_metrics()
+            self.assertEqual(ctx.exception.reason, "invalid response")
+            self.assertIsNone(ctx.exception.status)
+            snap = client.snapshot()
+            self.assertEqual(snap.errors["/metrics"].reason, "invalid response")
+        finally:
+            server.close()
 
     def test_redirect_refused(self):
         with FakeLlamaServer() as server:

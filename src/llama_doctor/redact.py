@@ -33,12 +33,13 @@ def safe_str(
 ) -> str | None:
     if not isinstance(value, str):
         return None
-    cleaned = value.translate(_STRIP_CONTROL)[:max_len]
+    stripped = value.translate(_STRIP_CONTROL)
+    for token in forbidden:
+        if token and token in stripped:
+            return None
+    cleaned = stripped[:max_len]
     if not cleaned:
         return None
-    for token in forbidden:
-        if token and token in cleaned:
-            return None
     return cleaned
 
 

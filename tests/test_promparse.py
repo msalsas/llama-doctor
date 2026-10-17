@@ -32,6 +32,22 @@ class TestParsePrometheus(unittest.TestCase):
         self.assertGreater(samples["m_inf"], 0)
         self.assertLess(samples["m_ninf"], 0)
 
+    def test_rejects_python_only_numeric_spellings(self):
+        samples = parse_prometheus("m_us 1_000\nm_lc_nan nan\nm_lc_inf infinity\nm_inf +Inf\n")
+        self.assertEqual(set(samples), {"m_inf"})
+        self.assertTrue(math.isinf(samples["m_inf"]))
+
+    def test_escaped_label_value_and_multiline_help(self):
+        text = (
+            "# HELP some_metric A help text that spans\n"
+            "# multiple lines via a backslash continuation\n"
+            "# TYPE some_metric gauge\n"
+            'some_metric{a="escaped\\\"value",b="x"} 42\n'
+            "\n"
+        )
+        samples = parse_prometheus(text)
+        self.assertEqual(samples['some_metric{a="escaped\\\"value",b="x"}'], 42.0)
+
     def test_skips_malformed_lines(self):
         samples = parse_prometheus("garbage line here\n{bad} 1\nfoo 1\n")
         self.assertEqual(samples, {"foo": 1.0})

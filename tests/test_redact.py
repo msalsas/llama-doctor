@@ -34,6 +34,8 @@ class TestSafeStr(unittest.TestCase):
         self.assertIsNone(safe_str("value with SENTINEL inside", forbidden=("SENTINEL",)))
         self.assertEqual(safe_str("clean value", forbidden=("SENTINEL",)), "clean value")
         self.assertEqual(safe_str("anything", forbidden=("", "SENTINEL")), "anything")
+        padded = "x" * 120 + "<__media_SENTINEL__>"
+        self.assertIsNone(safe_str(padded, forbidden=("<__media_SENTINEL__>",)))
         self.assertIsNone(safe_str(123, forbidden=()))
         self.assertIsNone(safe_str(""))
 
