@@ -2,8 +2,10 @@ import contextlib
 import io
 import json
 import os
+import sys
+import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from llama_doctor.cli import EXIT_TOOL_ERROR, main
 
@@ -44,7 +46,7 @@ class TestCli(unittest.TestCase):
             result, stdout, _ = self._run(["diagnose", server.url])
 
         self.assertEqual(result, 0)
-        self.assertIn("overall:", stdout)
+        self.assertEqual(stdout.splitlines()[-1], "overall: INFO (exit 0)")
 
     def test_diagnose_exit_1_on_warn(self):
         props = json.dumps({
@@ -66,7 +68,7 @@ class TestCli(unittest.TestCase):
             result, stdout, _ = self._run(["diagnose", server.url, "--json"])
 
         document = json.loads(stdout)
-        self.assertIn(result, (0, 1, 2))
+        self.assertEqual(result, 2)
         self.assertEqual(document["exit_code"], 2)
         self.assertEqual(document["rates"]["prefill_tps"], 40.0)
         self.assertEqual(document["server"]["quant"], "UD-Q4_K_XL")
@@ -106,10 +108,18 @@ class TestCli(unittest.TestCase):
         self.assertIn("base URL scheme must be http or https", stderr)
 
     def test_usage_error_exit_3(self):
-        with self.assertRaises(SystemExit) as raised:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as raised,
+        ):
             main(["diagnose"])
 
         self.assertEqual(raised.exception.code, EXIT_TOOL_ERROR)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("the following arguments are required: URL", stderr.getvalue())
 
     def test_version(self):
         stdout = io.StringIO()
@@ -134,7 +144,7 @@ class TestCli(unittest.TestCase):
             result, stdout, _ = self._run(["diagnose", server.url, "--probe", "--json"])
 
         document = json.loads(stdout)
-        self.assertIn(result, (0, 1, 2))
+        self.assertEqual(result, 1)
         self.assertEqual(document["probe"]["prefill_tps"], 800.0)
         self.assertNotIn(
             "prefill.moe_cpu_experts",
@@ -148,7 +158,53 @@ class TestCli(unittest.TestCase):
             result, _, stderr = self._run(["diagnose", server.url, "--probe"])
 
         self.assertEqual(result, 2)
+        self.assertIn(
+            "probe: warm-up plus one synthetic prompt (prefix cache disabled)",
+            stderr,
+        )
         self.assertIn("probe: failed", stderr)
+
+    def test_probe_is_skipped_when_server_is_dead(self):
+        with FakeLlamaServer() as server:
+            result, _, stderr = self._run(["diagnose", server.url, "--probe"])
+
+        self.assertEqual(result, 2)
+        self.assertNotIn("probe: warm-up plus one synthetic prompt", stderr)
+        self.assertNotIn("probe: failed", stderr)
+        self.assertFalse(any(request[1] == "/completion" for request in server.requests))
+
+    def test_no_color_flag_disables_color_output(self):
+        with (
+            FakeLlamaServer() as server,
+            patch("llama_doctor.cli.use_color", return_value=True) as use_color,
+            patch("llama_doctor.cli.render_report", return_value="report") as render_report,
+        ):
+            _set_routes(server)
+            result, stdout, _ = self._run(["diagnose", server.url, "--no-color"])
+
+        self.assertEqual(result, 2)
+        self.assertEqual(stdout, "report\n")
+        use_color.assert_called_once()
+        self.assertFalse(render_report.call_args.kwargs["color"])
+
+    def test_serve_lazily_imports_and_calls_dashboard_runner(self):
+        dashboard_server = types.ModuleType("llama_doctor.dashboard.server")
+        dashboard_server.run = Mock(return_value=17)
+        with patch.dict(sys.modules, {"llama_doctor.dashboard.server": dashboard_server}):
+            result, stdout, _ = self._run(
+                ["serve", "http://server", "--host", "0.0.0.0", "--port", "9000",
+                 "--interval", "3.5", "--history", "20"]
+            )
+
+        self.assertEqual(result, 17)
+        self.assertEqual(stdout, "")
+        dashboard_server.run.assert_called_once()
+        args, kwargs = dashboard_server.run.call_args
+        self.assertEqual(args[0].base_url, "http://server")
+        self.assertEqual(
+            {key: value for key, value in kwargs.items() if key != "out"},
+            {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20},
+        )
 
 
 if __name__ == "__main__":
