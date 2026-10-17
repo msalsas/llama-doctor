@@ -50,6 +50,23 @@ class TestEngine(unittest.TestCase):
         recommendations = report.recommendations()
         self.assertEqual(recommendations, [unflagged_high, flagged_high, medium])
 
+    def test_recommendations_sorted_by_impact_within_finding(self):
+        low = Recommendation("a-action", "a-flag", Impact.LOW)
+        high = Recommendation("b-action", "b-flag", Impact.HIGH)
+        medium = Recommendation("c-action", "c-flag", Impact.MEDIUM)
+        report = run_analyzers(make_context(), (
+            AnalyzerSpec("higher-impact", "Higher impact", lambda _: [Finding(
+                "one", "one.warn", Severity.WARN, "One", "One",
+                recommendations=(low, high),
+            )]),
+            AnalyzerSpec("lower-impact", "Lower impact", lambda _: [Finding(
+                "two", "two.warn", Severity.WARN, "Two", "Two",
+                recommendations=(medium,),
+            )]),
+        ))
+
+        self.assertEqual(report.recommendations(), [high, medium, low])
+
     def test_analyzer_exception_isolated(self):
         def raises(_):
             raise ValueError("SENTINEL")
