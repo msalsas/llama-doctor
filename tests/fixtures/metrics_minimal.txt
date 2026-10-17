@@ -1,0 +1,4 @@
+llamacpp:prompt_tokens_total 600
+llamacpp:prompt_seconds_total 2
+llamacpp:tokens_predicted_total 300
+llamacpp:tokens_predicted_seconds_total 10

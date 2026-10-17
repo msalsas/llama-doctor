@@ -1,0 +1,15 @@
+llamacpp:prompt_tokens_total 48000
+llamacpp:prompt_seconds_total 1200
+llamacpp:tokens_predicted_total 8400
+llamacpp:tokens_predicted_seconds_total 1200
+llamacpp:prompt_tokens_cached_total 6000
+llamacpp:n_decode_total 9000
+llamacpp:n_busy_slots_per_decode 1
+llamacpp:n_tokens_max 6144
+llamacpp:prompt_tokens_seconds 0
+llamacpp:predicted_tokens_seconds 0
+llamacpp:requests_processing 0
+llamacpp:requests_deferred 0
+llamacpp:spec_decode_num_draft_tokens_total 9000
+llamacpp:spec_decode_num_drafts_total 3000
+llamacpp:spec_decode_num_accepted_tokens_total 3600

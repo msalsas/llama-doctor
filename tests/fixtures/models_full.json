@@ -1,0 +1,1 @@
+{"object": "list", "data": [{"id": "Qwen3-30B-A3B-UD-Q4_K_XL.gguf", "object": "model", "meta": {"n_params": 30532122624, "size": 17716740096, "n_ctx_train": 40960}}]}
