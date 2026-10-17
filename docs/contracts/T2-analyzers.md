@@ -76,7 +76,8 @@ class Rate: value: float; source: str        # "probe" | "lifetime"
 def prefill_rate(ctx) -> Rate | None  # reliable probe first; else lifetime if prompt_tokens_total >= 1000
 def decode_rate(ctx) -> Rate | None   # reliable probe with predicted_n > 0; else lifetime decode_tps
 def is_cpu_bound(ctx) -> bool | None  # None if no prefill rate; True if prefill < 100
-                                      # or (decode known and prefill/decode < 2.0)
+                                      # or (decode finite and > 0, and prefill/decode < 2.0)
+                                      # for invalid decode rates, the ratio test is skipped
 ```
 
 ## Analyzers: one `analyze(ctx) -> list[Finding]` per module, `analyzer_id` = id
@@ -120,6 +121,7 @@ and so is the order within a list.
   `props.n_ctx`, with `n_ctx >= 16384` and `n_tokens_max / n_ctx < 0.25`. It
   gives WARN `kv.context_oversized` with evidence `peak_ratio`, `n_ctx`,
   `n_tokens_max`, and `suggested_ctx = max(4096, ceil(2*n_tokens_max/4096)*4096)`.
+  Non-finite context or peak-token values are not evaluable.
   Its rec, flag `-c`, names the suggested value; impact is HIGH when
   cpu-bound is True and MEDIUM otherwise. With no findings, return OK
   `kv.ok` if rule B was evaluable, else INSUFFICIENT `kv.insufficient_data`.
@@ -133,6 +135,7 @@ and so is the order within a list.
   Otherwise OK `spec.ok`. Evidence: `avg_draft_len`, `acceptance`.
 - **memory**: if `models.size_bytes` or `hints.vram_gib` is None,
   INSUFFICIENT `memory.insufficient_data` (detail names `--vram-gib`/`--ram-gib`).
+  Negative or non-finite VRAM/RAM hints are treated as absent.
   Let `weights_gib = size_bytes / 2**30`. If ram is given and
   weights > vram + ram, CRITICAL `memory.exceeds_total` (rec HIGH None,
   smaller quant). If weights > vram, INFO `memory.partial_offload` with
@@ -141,7 +144,7 @@ and so is the order within a list.
 - **props** (module `props_check.py`): if props is None, INSUFFICIENT
   `props.insufficient_data`. Non-empty `missing` gives INSUFFICIENT
   `props.minimal` (evidence `missing` = comma-joined; detail mentions wrapper
-  builds such as unsloth-studio). If `n_ctx > models.n_ctx_train`, WARN
+  builds such as unsloth-studio). If `n_ctx > models.n_ctx_train`, also emit WARN
   `props.ctx_exceeds_training` (MEDIUM `-c`). With no findings, OK `props.ok`.
 
 ## serialize.py
@@ -159,6 +162,10 @@ def rates_to_dict(m: MetricsSnapshot | None) -> dict
 def probe_to_dict(p: ProbeResult | None) -> dict | None
 def errors_to_dict(e: Mapping[str, EndpointError]) -> dict[str, str]   # endpoint -> reason
 ```
+
+All serializer output replaces non-finite floats with `None`, recursively in
+evidence and dataclass-derived values, so it is always valid for
+`json.dumps(..., allow_nan=False)`.
 
 ## tests/support.py addition
 
@@ -218,10 +225,11 @@ props, and models all None returns a non-empty list and raises nothing).
 
 test_engine: `test_moe_report_overall_critical_exit_2`;
 `test_healthy_report_exit_0` (no WARN/CRITICAL; overall INFO);
-`test_minimal_report_exit_0`; `test_findings_sorted` (severities
-non-increasing; first code `prefill.moe_cpu_experts`);
-`test_recommendations_deduped_by_flag` (MOE: exactly one `-c` rec and it is
-HIGH; exactly one `--draft-max`; impacts non-increasing);
+`test_minimal_report_exit_0`; `test_findings_sorted` (custom MOE WARN
+findings are ordered by maximum recommendation impact, not registration
+order); `test_recommendations_deduped_by_flag` (unflagged recommendations
+dedupe by action; same-flag recommendations retain the first, highest-impact
+occurrence; retained recommendations are impact-descending across findings);
 `test_analyzer_exception_isolated` (a spec whose func raises
 `ValueError("SENTINEL")` gives `<id>.error` INSUFFICIENT, detail `ValueError`,
 no SENTINEL); `test_custom_registry` (a one-analyzer tuple gives only its
