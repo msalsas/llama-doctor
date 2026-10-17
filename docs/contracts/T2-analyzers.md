@@ -77,7 +77,7 @@ def prefill_rate(ctx) -> Rate | None  # reliable probe first; else lifetime if p
 def decode_rate(ctx) -> Rate | None   # reliable probe with predicted_n > 0; else lifetime decode_tps
 def is_cpu_bound(ctx) -> bool | None  # None if no prefill rate; True if prefill < 100
                                       # or (decode finite and > 0, and prefill/decode < 2.0)
-                                      # invalid decode rates are treated as unknown (False)
+                                      # for invalid decode rates, the ratio test is skipped
 ```
 
 ## Analyzers: one `analyze(ctx) -> list[Finding]` per module, `analyzer_id` = id
@@ -225,10 +225,11 @@ props, and models all None returns a non-empty list and raises nothing).
 
 test_engine: `test_moe_report_overall_critical_exit_2`;
 `test_healthy_report_exit_0` (no WARN/CRITICAL; overall INFO);
-`test_minimal_report_exit_0`; `test_findings_sorted` (severities
-non-increasing; first code `prefill.moe_cpu_experts`);
-`test_recommendations_deduped_by_flag` (MOE: exactly one `-c` rec and it is
-HIGH; exactly one `--draft-max`; impacts non-increasing);
+`test_minimal_report_exit_0`; `test_findings_sorted` (custom MOE WARN
+findings are ordered by maximum recommendation impact, not registration
+order); `test_recommendations_deduped_by_flag` (unflagged recommendations
+dedupe by action; same-flag recommendations retain the first, highest-impact
+occurrence; retained recommendations are impact-descending across findings);
 `test_analyzer_exception_isolated` (a spec whose func raises
 `ValueError("SENTINEL")` gives `<id>.error` INSUFFICIENT, detail `ValueError`,
 no SENTINEL); `test_custom_registry` (a one-analyzer tuple gives only its

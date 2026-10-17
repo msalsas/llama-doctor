@@ -22,31 +22,33 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(report.exit_code, 0)
 
     def test_findings_sorted(self):
-        def moe_warn(code, impact):
-            return lambda _: [Finding("moe", code, Severity.WARN, code, code,
-                                     recommendations=(Recommendation(code, code, impact),) if impact else ())]
-
         report = run_analyzers(make_context(), (
-            AnalyzerSpec("first", "First", moe_warn("warn.first", Impact.HIGH)),
-            AnalyzerSpec("second", "Second", moe_warn("warn.second", Impact.HIGH)),
-            AnalyzerSpec("third", "Third", moe_warn("warn.third", Impact.MEDIUM)),
-            AnalyzerSpec("fourth", "Fourth", moe_warn("warn.fourth", 0)),
+            AnalyzerSpec("lower-impact", "Lower impact", lambda _: [Finding(
+                "moe", "moe.lower_impact", Severity.WARN, "Lower impact", "Lower impact",
+                recommendations=(Recommendation("Lower-impact action.", "lower", Impact.LOW),),
+            )]),
+            AnalyzerSpec("higher-impact", "Higher impact", lambda _: [Finding(
+                "moe", "moe.higher_impact", Severity.WARN, "Higher impact", "Higher impact",
+                recommendations=(Recommendation("Higher-impact action.", "higher", Impact.HIGH),),
+            )]),
         ))
         self.assertEqual([finding.code for finding in report.findings],
-                         ["warn.first", "warn.second", "warn.third", "warn.fourth"])
+                         ["moe.higher_impact", "moe.lower_impact"])
 
     def test_recommendations_deduped_by_flag(self):
-        first = Recommendation("Use a smaller quantization.", "first", Impact.HIGH)
-        duplicate = Recommendation("Use a smaller quantization.", "second", Impact.HIGH)
-        flagged = Recommendation("Reduce context.", "flagged", Impact.MEDIUM, "-c")
+        unflagged_low = Recommendation("Use a smaller quantization.", "low", Impact.LOW)
+        flagged_low = Recommendation("Reduce context conservatively.", "low", Impact.LOW, "-c")
+        medium = Recommendation("Tune batch size.", "medium", Impact.MEDIUM, "--batch-size")
+        unflagged_high = Recommendation("Use a smaller quantization.", "high", Impact.HIGH)
+        flagged_high = Recommendation("Reduce context aggressively.", "high", Impact.HIGH, "-c")
         report = run_analyzers(make_context(), (
             AnalyzerSpec("one", "One", lambda _: [Finding("one", "one.warn", Severity.WARN, "One", "One",
-                                                           recommendations=(first, flagged))]),
+                                                           recommendations=(unflagged_low, flagged_low, medium))]),
             AnalyzerSpec("two", "Two", lambda _: [Finding("two", "two.warn", Severity.WARN, "Two", "Two",
-                                                           recommendations=(duplicate,))]),
+                                                           recommendations=(unflagged_high, flagged_high))]),
         ))
         recommendations = report.recommendations()
-        self.assertEqual(recommendations, [first, flagged])
+        self.assertEqual(recommendations, [unflagged_high, flagged_high, medium])
 
     def test_analyzer_exception_isolated(self):
         def raises(_):
