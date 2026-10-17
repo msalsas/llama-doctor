@@ -57,7 +57,10 @@ def safe_float(value: object) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        result = float(value)
+        try:
+            result = float(value)
+        except OverflowError:
+            return None
         if math.isfinite(result):
             return result
     return None

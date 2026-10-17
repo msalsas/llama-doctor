@@ -52,6 +52,7 @@ class TestSafeNumbers(unittest.TestCase):
         self.assertIsNone(safe_float(float("nan")))
         self.assertIsNone(safe_float(float("inf")))
         self.assertIsNone(safe_float(float("-inf")))
+        self.assertIsNone(safe_float(10**400))
         self.assertIsNone(safe_float(True))
         self.assertEqual(safe_float(1.5), 1.5)
         self.assertEqual(safe_float(2), 2.0)

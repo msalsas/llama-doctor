@@ -10,7 +10,9 @@ and the whole line is skipped.
 import re
 
 _LINE_RE = re.compile(r"^([A-Za-z_:][\w:]*)(\{[^}]*\})?\s+(\S+)(?:\s+-?\d+)?\s*$")
-_VALUE_RE = re.compile(r"-?(\d+(\.\d+)?([eE][+-]?\d+)?|NaN|[+-]Inf(inity)?)")
+_VALUE_RE = re.compile(
+    r"^(?:[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?|NaN|[+-]Inf(inity)?)$"
+)
 
 
 def parse_prometheus(text: str) -> dict[str, float]:

@@ -37,6 +37,10 @@ class TestParsePrometheus(unittest.TestCase):
         self.assertEqual(set(samples), {"m_inf"})
         self.assertTrue(math.isinf(samples["m_inf"]))
 
+    def test_accepts_go_parse_float_finite_forms(self):
+        samples = parse_prometheus("m_half .5\nm_positive +1\nm_trailing 1.\n")
+        self.assertEqual(samples, {"m_half": 0.5, "m_positive": 1.0, "m_trailing": 1.0})
+
     def test_escaped_label_value_and_multiline_help(self):
         text = (
             "# HELP some_metric A help text that spans\n"

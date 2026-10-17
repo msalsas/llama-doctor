@@ -266,6 +266,23 @@ class TestLlamaClient(unittest.TestCase):
             self.assertEqual(ctx.exception.reason, "no timings in response")
             self.assertEqual(ctx.exception.endpoint, "/completion")
 
+    def test_complete_rejects_overflowing_timing(self):
+        body = json.dumps(
+            {
+                "timings": {
+                    "prompt_n": 1200,
+                    "prompt_ms": 10**400,
+                    "predicted_n": 64,
+                    "predicted_ms": 8000.0,
+                },
+            }
+        )
+        with FakeLlamaServer() as server:
+            server.set_route("/completion", 200, body, content_type="application/json")
+            timings = LlamaClient(server.url).complete("hello", 64)
+        self.assertIsNone(timings.prompt_ms)
+        self.assertEqual(timings.predicted_ms, 8000.0)
+
 
 if __name__ == "__main__":
     unittest.main()
