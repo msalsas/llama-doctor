@@ -19,6 +19,15 @@ class TestStaticFiles(unittest.TestCase):
                 self.assertTrue((self.root / filename).is_file())
                 self.assertGreater(len((self.root / filename).read_bytes()), 0)
 
+    def test_app_assets_contain_only_ascii_characters(self):
+        for filename, source in (
+            ("index.html", self.index),
+            ("app.js", self.app_js),
+            ("app.css", self.app_css),
+        ):
+            with self.subTest(filename=filename):
+                self.assertTrue(all(ord(character) < 128 for character in source))
+
     def test_index_references_local_assets_only(self):
         for asset in (
             'href="/static/app.css"',
