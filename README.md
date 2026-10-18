@@ -8,7 +8,7 @@ A command-line tool that reads a local LLM server's metrics and tells you what i
 
 ![Dashboard](docs/assets/dashboard.png)
 
-The live dashboard on a Qwen3-30B MoE rig with offloaded experts.
+The live dashboard on an RTX 5080 rig running Unsloth Studio, serving Qwen3.8-Flash-Next-GGUF.
 
 ## What it does
 
@@ -38,39 +38,37 @@ PYTHONPATH=src python3 -m llama_doctor diagnose http://127.0.0.1:8080
 
 ## Quick start
 
-Point it at a running llama.cpp server:
+Point it at a running server. A plain llama.cpp server needs only the URL (for example `http://127.0.0.1:8080`); wrappers that require an API key, such as Unsloth Studio, take it from an environment variable via `--api-key-env`:
 
 ```sh
-llama-doctor diagnose http://127.0.0.1:8080
+llama-doctor diagnose http://laptop-msi:8888 --api-key-env UNSLOTH_API_KEY
 ```
 
 ```text
-llama-doctor 0.1.0  http://127.0.0.1:8080
-model  Qwen3-30B-A3B-UD-Q4_K_XL  quant UD-Q4_K_XL  ctx 32768  slots 1  build b6500-abc1234
+llama-doctor 0.1.0  http://laptop-msi:8888
+model  Qwen3.8-Flash-Next-GGUF  quant -  ctx 80128  slots 1  build unsloth-studio/v0.1.908-beta
 
 rates (lifetime averages)
-  prefill       8422.9 tok/s
-  decode        1457.9 tok/s
-  prefix cache  10.3 %
-  drafts        len 3.00  acceptance 58.3 %
+  prefill       135.2 tok/s
+  decode        24.6 tok/s
+  prefix cache  96.7 %
+  drafts        len 2.00  acceptance 64.6 %
 
 findings
-  WARN prefix_cache.low_hit_ratio  Prefix cache hit rate is low
-        Few prompt tokens are reused.
-  WARN kv.context_oversized  Context is oversized
-        Observed peak token use is far below configured context.
+  INFO prefill.slow  Prefill is slow
+        Prefill throughput is below the expected range.
   OK   connectivity.ok  Endpoints available
-  OK   prefill.ok  Prefill throughput is healthy
   OK   decode.ok  Decode throughput is healthy
+  OK   prefix_cache.ok  Prefix cache is effective
+  OK   kv.ok  KV cache sizing is healthy
   OK   spec.ok  Speculative decoding is healthy
-  OK   props.ok  Properties are complete
   N/A  memory.insufficient_data  Memory estimate unavailable
         Provide --vram-gib and optionally --ram-gib.
+  N/A  props.minimal  Properties are minimal
+        Wrapper builds such as unsloth-studio omit required fields.
 recommendations (by impact)
-  1. high   Keep the prompt prefix byte-identical and put variable content last.
-  2. medium Enable cache reuse.  [--cache-reuse]
-  3. medium Set context to 12288.  [-c]
-overall: WARN (exit 1)
+  1. medium Increase micro-batch size.  [--ubatch-size]
+overall: INFO (exit 0)
 ```
 
 Exit codes: `0` = OK, `1` = WARN, `2` = CRIT (including server unreachable), `3` = invalid usage or arguments.
