@@ -7,6 +7,7 @@ from llama_doctor.cli import main
 from llama_doctor.client import LlamaClient
 from llama_doctor.dashboard.sampler import Sampler
 from llama_doctor.redact import Secret
+from llama_doctor.slots import MAX_SLOTS, parse_slots
 
 from .support import FakeLlamaServer, load_fixture
 
@@ -98,6 +99,13 @@ class TestSlots(unittest.TestCase):
 
         self.assertEqual(state["context"]["live_used"], 10)
         self.assertEqual(state["context"]["live_capacity"], 1000)
+
+    def test_slots_truncated_flag(self):
+        full = [{"n_ctx": 10}] * MAX_SLOTS
+        self.assertFalse(parse_slots(full).slots_truncated)
+        snapshot = parse_slots(full + [{"n_ctx": 10}])
+        self.assertTrue(snapshot.slots_truncated)
+        self.assertEqual(snapshot.n_slots, MAX_SLOTS)
 
     def test_weird_items_are_ignored(self):
         slots = [

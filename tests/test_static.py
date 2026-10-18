@@ -73,6 +73,7 @@ class TestStaticFiles(unittest.TestCase):
             "note-prefill",
             "note-kv",
             "note-cache-hit",
+            "note-slots",
         )
         for identifier in identifiers:
             with self.subTest(identifier=identifier):
@@ -124,14 +125,14 @@ class TestStaticFiles(unittest.TestCase):
         self.assertNotIn("lifetime.kv_usage_ratio", self.app_js)
 
     def test_metric_notes_start_hidden_and_are_styled(self):
-        for note in ("note-decode", "note-prefill", "note-kv", "note-cache-hit"):
+        for note in ("note-decode", "note-prefill", "note-kv", "note-cache-hit", "note-slots"):
             with self.subTest(note=note):
                 self.assertRegex(self.index, rf'id="{note}" class="chart-note hidden"')
                 self.assertIn(f'"{note}"', self.app_js)
         self.assertIn(".chart-note", self.app_css)
 
     def test_metric_notes_follow_sampler_flags(self):
-        for flag in ("decode_idle", "prefill_idle", "kv_unexported", "cache_hit_unexported"):
+        for flag in ("decode_idle", "prefill_idle", "kv_unexported", "cache_hit_unexported", "slots_unavailable"):
             with self.subTest(flag=flag):
                 self.assertIn(flag, self.app_js)
 
@@ -143,7 +144,8 @@ class TestStaticFiles(unittest.TestCase):
         canvas = self.index.index('id="chart-kv-cache"')
         self.assertLess(canvas, self.index.index('id="note-kv"'))
         self.assertLess(self.index.index('id="note-kv"'), self.index.index('id="note-cache-hit"'))
-        self.assertLess(self.index.index('id="note-cache-hit"'), self.index.index('data-table="kv-cache"'))
+        self.assertLess(self.index.index('id="note-cache-hit"'), self.index.index('id="note-slots"'))
+        self.assertLess(self.index.index('id="note-slots"'), self.index.index('data-table="kv-cache"'))
 
     def test_css_severity_classes(self):
         for severity in ("critical", "warn", "info", "ok", "insufficient_data"):

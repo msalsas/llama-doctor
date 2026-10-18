@@ -342,6 +342,7 @@ class SlotsSnapshot:
     live_capacity: int
     n_slots: int
     n_processing: int
+    slots_truncated: bool = False
 
 
 @dataclass(frozen=True)

@@ -42,4 +42,6 @@ def parse_slots(payload: Any) -> SlotsSnapshot | None:
         n_processing += slot.get("is_processing") is True
     if n_slots == 0 or capacity <= 0:
         return None
-    return SlotsSnapshot(used, capacity, n_slots, n_processing)
+    return SlotsSnapshot(
+        used, capacity, n_slots, n_processing, slots_truncated=len(payload) > MAX_SLOTS
+    )

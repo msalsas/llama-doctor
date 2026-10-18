@@ -379,6 +379,7 @@
     prefill_idle: "note-prefill",
     kv_unexported: "note-kv",
     cache_hit_unexported: "note-cache-hit",
+    slots_unavailable: "note-slots",
   };
 
   function updateNotes(state) {
