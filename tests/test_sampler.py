@@ -93,8 +93,34 @@ class TestSampler(unittest.TestCase):
                 "kv_usage_ratio",
                 "requests_processing",
                 "requests_deferred",
+                "context_used_ratio",
             ),
         )
+
+    def test_delta_point_context_used_ratio(self):
+        metrics = MetricsSnapshot.from_samples(
+            parse_prometheus(load_fixture("metrics_context_near_limit.txt"))
+        )
+        point = delta_point(None, metrics, 1.0, n_ctx=80128)
+
+        self.assertAlmostEqual(point["context_used_ratio"], 78501 / 80128, places=9)
+        self.assertIsNone(delta_point(None, metrics, 1.0)["context_used_ratio"])
+
+    def test_history_has_context_used_series(self):
+        from llama_doctor.models import PropsSnapshot
+
+        metrics = MetricsSnapshot.from_samples(
+            parse_prometheus(load_fixture("metrics_context_near_limit.txt"))
+        )
+        props = PropsSnapshot.from_payload(json.loads(load_fixture("props_context_80k.json")))
+        sampler = Sampler(lambda: ServerSnapshot(1.0, metrics, props, None, {}), target="t")
+        sampler.tick()
+
+        state = sampler.state()
+        self.assertAlmostEqual(state["history"][-1]["context_used_ratio"], 78501 / 80128, places=9)
+        self.assertEqual(state["context"]["label"], "78.5k / 80.1k")
+        codes = [finding["code"] for finding in state["report"]["findings"]]
+        self.assertIn("context.near_limit", codes)
 
     def test_delta_point_queue_gauges_are_current_values(self):
         point = delta_point(
@@ -311,6 +337,7 @@ class TestSampler(unittest.TestCase):
                 "server",
                 "lifetime",
                 "history",
+                "context",
                 "report",
                 "errors",
                 "notes",

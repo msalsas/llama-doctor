@@ -7,8 +7,15 @@ from typing import Any
 from llama_doctor import __version__
 from llama_doctor.analysis import BUILTIN_ANALYZERS, diagnose
 from llama_doctor.analysis.base import AnalyzerSpec, DiagnosisContext, Report
+from llama_doctor.analysis.signals import context_used_ratio
 from llama_doctor.models import MetricsSnapshot, PropsSnapshot, ServerSnapshot
-from llama_doctor.serialize import errors_to_dict, props_to_dict, rates_to_dict, report_to_dict
+from llama_doctor.serialize import (
+    context_to_dict,
+    errors_to_dict,
+    props_to_dict,
+    rates_to_dict,
+    report_to_dict,
+)
 
 DEFAULT_INTERVAL = 2.0
 DEFAULT_HISTORY = 300
@@ -23,6 +30,7 @@ POINT_KEYS = (
     "kv_usage_ratio",
     "requests_processing",
     "requests_deferred",
+    "context_used_ratio",
 )
 
 
@@ -58,12 +66,13 @@ def _delta_rate(
 
 
 def delta_point(
-    prev: MetricsSnapshot | None, cur: MetricsSnapshot, t: float
+    prev: MetricsSnapshot | None, cur: MetricsSnapshot, t: float, n_ctx: int | None = None
 ) -> dict[str, float | None]:
     """Rates between a baseline snapshot and ``cur``; ``prev`` is the window baseline.
 
     llama.cpp counters only move when a request completes, so the sampler passes the
     newest snapshot at or before the window start rather than the adjacent sample.
+    ``context_used_ratio`` is the observed peak over ``n_ctx``, not instantaneous use.
     """
     point: dict[str, float | None] = {
         "t": t,
@@ -75,6 +84,7 @@ def delta_point(
         "kv_usage_ratio": cur.kv_cache_usage_ratio,
         "requests_processing": cur.requests_processing,
         "requests_deferred": cur.requests_deferred,
+        "context_used_ratio": context_used_ratio(cur.n_tokens_max, n_ctx),
     }
     if prev is None:
         return point
@@ -176,7 +186,10 @@ class Sampler:
             self._errors = errors_to_dict(snapshot.errors)
             self._updated_at = snapshot.taken_at
             if snapshot.metrics is not None:
-                self._history.append(delta_point(baseline, snapshot.metrics, snapshot.taken_at))
+                n_ctx = snapshot.server_props.n_ctx if snapshot.server_props else None
+                self._history.append(
+                    delta_point(baseline, snapshot.metrics, snapshot.taken_at, n_ctx)
+                )
 
     def _advance_window(
         self, snapshot: ServerSnapshot
@@ -234,6 +247,7 @@ class Sampler:
                 "server": props_to_dict(self._props),
                 "lifetime": lifetime,
                 "history": list(self._history),
+                "context": context_to_dict(self._metrics, self._props),
                 "report": report_to_dict(self._report) if self._report is not None else None,
                 "errors": dict(self._errors),
                 "notes": self._notes(lifetime),

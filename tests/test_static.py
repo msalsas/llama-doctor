@@ -59,6 +59,7 @@ class TestStaticFiles(unittest.TestCase):
             "tile-prefill",
             "tile-cache",
             "tile-kv",
+            "tile-context",
             "tile-queue",
             "chart-decode",
             "chart-prefill",
@@ -167,6 +168,28 @@ class TestStaticFiles(unittest.TestCase):
         )
         for token in tokens:
             self.assertRegex(self.app_css, rf"{re.escape(token)}\s*:")
+
+    def test_six_tiles_share_one_row_with_equal_height_and_flexible_width(self):
+        self.assertEqual(self.index.count('class="tile"'), 6)
+        self.assertIn(".tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch;",
+                      self.app_css)
+        self.assertIn(".tile { padding: 16px; min-height: 102px; }", self.app_css)
+
+    def test_context_tile_sits_between_kv_and_queue(self):
+        kv, context, queue = (self.index.index(f'id="tile-{name}"') for name in ("kv", "context", "queue"))
+        self.assertLess(kv, context)
+        self.assertLess(context, queue)
+        self.assertIn('"tile-context": "Context"', self.app_js)
+
+    def test_context_tile_shows_peak_ratio_and_label_from_state(self):
+        self.assertIn("percent(number(context.used_ratio))", self.app_js)
+        self.assertIn('text(context.label, "n/a")', self.app_js)
+
+    def test_kv_chart_has_context_used_series(self):
+        self.assertIn('label: "Context used"', self.app_js)
+        self.assertIn('["kv_usage_ratio", "cache_hit_ratio", "context_used_ratio"]', self.app_js)
+        self.assertIn('{ label: "Context used", key: "context_used_ratio", format: percent }', self.app_js)
+        self.assertRegex(self.app_css, r"--s-ctx\s*:")
 
     def test_queue_tile_follows_kv_tile(self):
         self.assertLess(self.index.index('id="tile-kv"'), self.index.index('id="tile-queue"'))

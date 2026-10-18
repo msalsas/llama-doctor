@@ -1,6 +1,17 @@
 from collections.abc import Sequence
 
-from . import connectivity, decode, kv, memory, prefill, prefix_cache, props_check, queue, spec
+from . import (
+    connectivity,
+    context,
+    decode,
+    kv,
+    memory,
+    prefill,
+    prefix_cache,
+    props_check,
+    queue,
+    spec,
+)
 from .base import AnalyzerSpec, DiagnosisContext, Report
 from .engine import run_analyzers
 
@@ -10,6 +21,7 @@ BUILTIN_ANALYZERS = (
     AnalyzerSpec("decode", "Decode", decode.analyze),
     AnalyzerSpec("prefix_cache", "Prefix cache", prefix_cache.analyze),
     AnalyzerSpec("kv", "KV cache", kv.analyze),
+    AnalyzerSpec("context", "Context window", context.analyze),
     AnalyzerSpec("queue", "Request queue", queue.analyze),
     AnalyzerSpec("spec", "Speculative decoding", spec.analyze),
     AnalyzerSpec("memory", "Memory", memory.analyze),

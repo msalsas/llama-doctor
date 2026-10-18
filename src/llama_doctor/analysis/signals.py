@@ -43,6 +43,15 @@ def deferred_peak(ctx: DiagnosisContext) -> float | None:
     )
 
 
+def context_used_ratio(n_tokens_max: float | None, n_ctx: float | None) -> float | None:
+    """Observed peak tokens in context over the configured window; a peak, not current use."""
+    if n_tokens_max is None or n_ctx is None:
+        return None
+    if not (math.isfinite(n_tokens_max) and math.isfinite(n_ctx)) or n_tokens_max < 0 or n_ctx <= 0:
+        return None
+    return n_tokens_max / n_ctx
+
+
 def is_cpu_bound(ctx: DiagnosisContext) -> bool | None:
     prefill = prefill_rate(ctx)
     if prefill is None:

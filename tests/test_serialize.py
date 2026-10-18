@@ -5,8 +5,10 @@ from llama_doctor.analysis import diagnose
 from llama_doctor.analysis.base import Finding, Report, Severity
 from llama_doctor.models import EndpointError, MetricsSnapshot
 from llama_doctor.serialize import (
+    context_to_dict,
     errors_to_dict,
     finding_to_dict,
+    format_tokens,
     props_to_dict,
     rates_to_dict,
     report_to_dict,
@@ -17,6 +19,33 @@ from .support import make_context
 
 
 class TestSerialize(unittest.TestCase):
+    def test_format_tokens_k_and_m(self):
+        for value, expected in ((0, "0"), (999, "999"), (1000, "1.0k"), (78501, "78.5k"),
+                                (80128, "80.1k"), (999949, "999.9k"), (999950, "1.0M"),
+                                (1048576, "1.0M"), (12_345_678, "12.3M")):
+            with self.subTest(value=value):
+                self.assertEqual(format_tokens(value), expected)
+
+    def test_format_tokens_missing_is_none(self):
+        self.assertIsNone(format_tokens(None))
+        self.assertIsNone(format_tokens(float("nan")))
+
+    def test_context_to_dict_fixture_80k(self):
+        context = make_context("metrics_context_near_limit.txt", "props_context_80k.json")
+        result = context_to_dict(context.metrics, context.props)
+        self.assertEqual(set(result), {"used_ratio", "n_tokens_max", "n_ctx", "label"})
+        self.assertAlmostEqual(result["used_ratio"], 78501 / 80128, places=9)
+        self.assertEqual(round(result["used_ratio"] * 100, 1), 98.0)
+        self.assertEqual((result["n_tokens_max"], result["n_ctx"], result["label"]),
+                         (78501, 80128, "78.5k / 80.1k"))
+
+    def test_context_to_dict_without_n_ctx(self):
+        context = make_context("metrics_context_near_limit.txt", "props_unsloth_minimal.json")
+        self.assertEqual(context_to_dict(context.metrics, context.props),
+                         {"used_ratio": None, "n_tokens_max": 78501, "n_ctx": None, "label": None})
+        self.assertEqual(context_to_dict(None, None),
+                         {"used_ratio": None, "n_tokens_max": None, "n_ctx": None, "label": None})
+
     def test_report_json_roundtrip(self):
         for context in (
             make_context(),

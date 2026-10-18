@@ -64,7 +64,10 @@ INSUFFICIENT_DATA, f"{spec.title}: analyzer failed", type(exc).__name__)`;
 never put the exception message in it. Sort by
 `(-severity, -max_impact, registry_index)`. `analysis/__init__.py` exports
 `BUILTIN_ANALYZERS` in this order: connectivity, prefill, decode,
-prefix_cache, kv, spec, memory, props. It also exports `diagnose(ctx,
+prefix_cache, kv, context, queue, spec, memory, props. `context` gives WARN
+`context.near_limit` when `n_tokens_max / n_ctx >= 0.9` (evidence `used_ratio`,
+`n_tokens_max`, `n_ctx`), OK `context.ok` below that, and
+`context.insufficient_data` without both values. It also exports `diagnose(ctx,
 analyzers=BUILTIN_ANALYZERS) -> Report`.
 
 ## signals.py

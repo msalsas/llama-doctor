@@ -271,6 +271,41 @@ class TestAnalyzers(unittest.TestCase):
         self.assertIn("queue.deferred", codes)
         self.assertNotIn("kv.saturated", codes)
 
+    def _context_at(self, n_tokens_max, n_ctx=100000):
+        context = make_context("metrics_healthy.txt")
+        return replace(context, snapshot=replace(
+            context.snapshot,
+            metrics=replace(context.metrics, n_tokens_max=n_tokens_max),
+            props=replace(context.snapshot.props, n_ctx=n_ctx)))
+
+    def test_context_89_percent_is_ok(self):
+        self.assert_finding(findings(self._context_at(89000), "context")[0], "context.ok", Severity.OK,
+                            {"used_ratio": 0.89, "n_tokens_max": 89000, "n_ctx": 100000})
+
+    def test_context_90_percent_is_near_limit(self):
+        finding = findings(self._context_at(90000), "context")[0]
+        self.assert_finding(finding, "context.near_limit", Severity.WARN,
+                            {"used_ratio": 0.9, "n_tokens_max": 90000, "n_ctx": 100000})
+        self.assertEqual(finding.recommendations[0].flag, "-c")
+
+    def test_context_91_percent_is_near_limit(self):
+        self.assert_finding(findings(self._context_at(91000), "context")[0], "context.near_limit", Severity.WARN,
+                            {"used_ratio": 0.91, "n_tokens_max": 91000, "n_ctx": 100000})
+
+    def test_context_near_limit_fixture_80k(self):
+        finding = findings(make_context("metrics_context_near_limit.txt", "props_context_80k.json"), "context")[0]
+        self.assertEqual((finding.code, finding.severity), ("context.near_limit", Severity.WARN))
+        self.assertEqual((finding.evidence["n_tokens_max"], finding.evidence["n_ctx"]), (78501, 80128))
+        self.assertAlmostEqual(finding.evidence["used_ratio"], 78501 / 80128, places=9)
+
+    def test_context_without_n_ctx_does_not_fire(self):
+        self.assert_finding(findings(self._context_at(91000, n_ctx=None), "context")[0],
+                            "context.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+
+    def test_context_unsloth_minimal_is_insufficient(self):
+        context = make_context("metrics_context_near_limit.txt", "props_unsloth_minimal.json", None)
+        self.assertEqual(findings(context, "context")[0].code, "context.insufficient_data")
+
     def test_no_analyzer_raises_on_empty_context(self):
         empty = DiagnosisContext(ServerSnapshot(0, None, None, None, {}))
         for spec in BUILTIN_ANALYZERS:

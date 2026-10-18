@@ -29,6 +29,7 @@
       <article id="tile-prefill" class="tile"></article>
       <article id="tile-cache" class="tile"></article>
       <article id="tile-kv" class="tile"></article>
+      <article id="tile-context" class="tile"></article>
       <article id="tile-queue" class="tile"></article>
     </section>
     <section class="dashboard-grid">
@@ -46,7 +47,7 @@
       </article>
       <article class="panel">
         <h2>KV and prefix cache</h2>
-        <div class="chart-wrap"><canvas id="chart-kv-cache" aria-label="KV usage and prefix cache hit percentages" role="img"></canvas></div>
+        <div class="chart-wrap"><canvas id="chart-kv-cache" aria-label="KV usage, prefix cache hit and peak context used percentages" role="img"></canvas></div>
         <p id="note-kv" class="chart-note hidden" role="note">KV usage not exported by this server</p>
         <p id="note-cache-hit" class="chart-note hidden" role="note">Prefix cache hits not exported by this server</p>
         <details><summary>Recent KV and cache points</summary><div class="table-wrap" data-table="kv-cache"></div></details>
