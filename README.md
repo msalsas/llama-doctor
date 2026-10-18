@@ -13,7 +13,7 @@ The live dashboard on an RTX 5080 rig running Unsloth Studio, serving Qwen3.8-Fl
 ## What it does
 
 - Reads `/metrics`, `/props` and `/v1/models` over HTTP. It never attaches to, restarts or reconfigures the server process.
-- Runs 10 analyzers that emit 43 distinct findings across connectivity, prefill and decode throughput, memory, cache, context sizing, request queueing, speculative decoding, quantization and expert offload.
+- Runs 10 analyzers that emit 43 distinct findings across connectivity, prefill and decode throughput, memory, cache hit ratio, context sizing, request queueing, speculative decoding and expert offload, and quantization where exported.
 - Ranks recommendations by impact and names the server flag to change.
 - Returns an exit code per severity, so you can gate CI jobs or cron checks on it.
 - Optionally serves a local dashboard with live charts and findings.
@@ -143,7 +143,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 
 ## Checks
 
-The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache usage, context window (near the limit or oversized), request queue, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
+The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache usage, context window (near the limit or oversized), request queue, speculative decoding, and memory (exact weights sizing and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
 
 ![Findings panel](docs/assets/findings.png)
 

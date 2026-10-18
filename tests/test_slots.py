@@ -145,7 +145,7 @@ class TestSlots(unittest.TestCase):
         self.assertIsNone(state["kv"]["usage_ratio"])
         self.assertIn("n_tokens_max", state["context"])
 
-    def test_note_is_sticky_and_clears_on_recovery(self):
+    def test_note_is_sticky_after_recovery(self):
         with FakeLlamaServer() as server:
             _routes(server)
             client = LlamaClient(server.url)
@@ -155,7 +155,8 @@ class TestSlots(unittest.TestCase):
             self.assertTrue(sampler.state()["notes"]["slots_unavailable"])
             server.set_route("/slots", 200, json.dumps(FULL_SLOTS), "application/json")
             sampler.tick()
-            self.assertFalse(sampler.state()["notes"]["slots_unavailable"])
+            self.assertTrue(sampler.state()["notes"]["slots_unavailable"])
+            self.assertEqual(sampler.state()["context"]["live_used"], 175)
 
     def test_no_slots_skips_request(self):
         with FakeLlamaServer() as server:

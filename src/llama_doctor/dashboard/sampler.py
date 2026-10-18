@@ -188,7 +188,7 @@ class Sampler:
             self._props = snapshot.server_props
             self._metrics = snapshot.metrics
             self._slots = snapshot.slots
-            self._slots_unavailable = snapshot.slots_error is not None
+            self._slots_unavailable = self._slots_unavailable or snapshot.slots_error is not None
             self._report = report
             self._errors = errors_to_dict(snapshot.errors)
             self._updated_at = snapshot.taken_at

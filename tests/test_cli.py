@@ -261,6 +261,27 @@ class TestCli(unittest.TestCase):
                 self.assertIn("argument --rate-window: must be > 0", stderr.getvalue())
         dashboard_server.run.assert_not_called()
 
+    def _assert_serve_rejects(self, flag, values, message):
+        dashboard_server = types.ModuleType("llama_doctor.dashboard.server")
+        dashboard_server.run = Mock(return_value=0)
+        for value in values:
+            with self.subTest(flag=flag, value=value), patch.dict(
+                sys.modules, {"llama_doctor.dashboard.server": dashboard_server}
+            ):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                    main(["serve", "http://server", flag, value])
+
+                self.assertEqual(raised.exception.code, EXIT_TOOL_ERROR)
+                self.assertIn(message, stderr.getvalue())
+        dashboard_server.run.assert_not_called()
+
+    def test_serve_rejects_non_positive_interval(self):
+        self._assert_serve_rejects("--interval", ("0", "-1", "nan"), "argument --interval: must be > 0")
+
+    def test_serve_rejects_non_positive_history(self):
+        self._assert_serve_rejects("--history", ("0", "-5", "1.5", "x"), "argument --history:")
+
 
 if __name__ == "__main__":
     unittest.main()

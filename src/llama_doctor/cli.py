@@ -29,6 +29,16 @@ def _positive_float(value: str) -> float:
     return number
 
 
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be an integer > 0") from None
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the llama-doctor command-line parser."""
     parser = _ArgumentParser(prog="llama-doctor")
@@ -51,8 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("url", metavar="URL")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8765)
-    serve_parser.add_argument("--interval", type=float, default=2.0)
-    serve_parser.add_argument("--history", type=int, default=300)
+    serve_parser.add_argument("--interval", type=_positive_float, default=2.0)
+    serve_parser.add_argument("--history", type=_positive_int, default=300)
     serve_parser.add_argument("--rate-window", type=_positive_float, default=30.0, metavar="SEC")
     serve_parser.add_argument("--api-key-env", metavar="VAR")
     serve_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")

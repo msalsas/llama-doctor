@@ -1,5 +1,6 @@
 from .base import DiagnosisContext, Finding, Impact, Recommendation, Severity
 from .signals import (
+    HIGH_CACHE_HIT_RATIO,
     MIN_PREFILL_DECODE_RATIO,
     decode_rate,
     is_cpu_bound,
@@ -8,7 +9,6 @@ from .signals import (
 )
 
 SLOW_PREFILL_TPS = 300.0
-HIGH_CACHE_HIT_RATIO = 0.5
 # Mean uncached prompt tokens per request above which a high cache hit no longer explains a low rate.
 LARGE_PROMPT_TOKENS = 2048
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from llama_doctor.analysis import BUILTIN_ANALYZERS
 from llama_doctor.analysis.base import DiagnosisContext, HostHints, Severity
+from llama_doctor.analysis.signals import is_cpu_bound
 from llama_doctor.models import EndpointError, ProbeResult, PropsSnapshot, ServerSnapshot
 
 from .support import make_context
@@ -118,6 +119,21 @@ class TestAnalyzers(unittest.TestCase):
         finding = findings(self._lifetime_prefill(135.0, None), "prefill")[0]
         self.assertEqual((finding.code, finding.severity), ("prefill.slow", Severity.WARN))
         self.assertIsNone(finding.evidence["cache_hit_ratio"])
+
+    def test_slow_lifetime_with_high_cache_hit_is_not_cpu_bound(self):
+        context = self._lifetime_prefill(10.0, 10000 * 0.9 / 0.1)
+        self.assertIsNone(is_cpu_bound(context))
+        codes = {finding.code for finding in findings(context, "prefill")}
+        self.assertFalse(codes & {"prefill.cpu_bound", "prefill.moe_cpu_experts"})
+
+    def test_slow_lifetime_without_cache_info_still_flags_cpu_bound(self):
+        context = self._lifetime_prefill(10.0, None)
+        self.assertTrue(is_cpu_bound(context))
+        self.assertIn(findings(context, "prefill")[0].code, {"prefill.cpu_bound", "prefill.moe_cpu_experts"})
+
+    def test_slow_probe_with_high_cache_hit_is_still_cpu_bound(self):
+        context = replace(self._lifetime_prefill(10.0, 10000 * 0.9 / 0.1), probe=ProbeResult(50, 20, 1200, 4, 0))
+        self.assertTrue(is_cpu_bound(context))
 
     def _with_window(self, context, prompt_steps):
         """Window whose prompt_tokens_total climbs by ``prompt_steps``; the last sample is current."""

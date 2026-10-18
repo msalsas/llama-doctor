@@ -18,6 +18,7 @@ src/llama_doctor/
   redact.py              Secret, safe_str, safe_int, safe_float        (T1)
   promparse.py           Prometheus text -> dict[str, float]           (T1)
   models.py              typed snapshots, built from whitelists        (T1)
+  slots.py               /slots payload -> SlotsSnapshot (token counts only)
   client.py              LlamaClient, FetchError, URL normalization    (T1)
   analysis/
     base.py              Severity, Impact, Recommendation, Finding,
@@ -53,6 +54,7 @@ LlamaClient.snapshot()
   GET /metrics   -> promparse -> MetricsSnapshot.from_samples
   GET /props     -> json      -> PropsSnapshot.from_payload   (whitelist)
   GET /v1/models -> json      -> ModelsMeta.from_payload      (whitelist)
+  GET /slots     -> json      -> slots.py -> SlotsSnapshot    (optional, skipped by --no-slots)
   failures       -> errors[endpoint] = EndpointError
         |
   ServerSnapshot  (+ ProbeResult | None, + HostHints, + dashboard window)  = DiagnosisContext
@@ -61,6 +63,10 @@ LlamaClient.snapshot()
         |
   render/terminal | serialize -> --json | dashboard /api/state
 ```
+
+`/slots` is read by default, only for token counts (live context use and a KV
+estimate); prompt text and ids are never kept. Its failure is not an endpoint
+error: it sets `ServerSnapshot.slots_error` and leaves the rest untouched.
 
 Raw JSON payloads exist only as local variables inside `client.py`. No public
 function returns them, stores them, or puts them in an exception.
@@ -100,8 +106,12 @@ int | None`.
 
 `EndpointError`: `endpoint: str`, `status: int | None`, `reason: str`.
 
+`SlotsSnapshot`: `live_used, live_capacity, n_slots, n_processing: int`,
+`slots_truncated: bool`.
+
 `ServerSnapshot`: `taken_at, metrics, props, models, errors: Mapping[str,
-EndpointError]`; `alive` is true when `/metrics` or `/v1/models` answered.
+EndpointError]`, `slots: SlotsSnapshot | None`, `slots_error: str | None`
+(why `/slots` yielded nothing; None when skipped or read); `alive` is true when `/metrics` or `/v1/models` answered.
 `/health` is never used: custom wrappers 404 it while healthy.
 
 `ProbeResult`: `prefill_tps, decode_tps: float`, `prompt_n, predicted_n:
@@ -187,10 +197,13 @@ DNS rebinding. Every response carries
   "server":   props_to_dict | null,
   "lifetime": rates (counter totals; kv_usage_ratio and n_tokens_max are current gauges),
   "history":  [ point, ... ]    oldest first, ring buffer (default 300)
-  "context":  { used_ratio, n_tokens_max, n_ctx, label },
+  "context":  { used_ratio, n_tokens_max, n_ctx, label,
+                live_used, live_capacity },   live_* only when /slots was read
+  "kv":       { usage_ratio, estimated, evidence },
   "report":   report_to_dict | null,
   "errors":   { endpoint: reason },
-  "notes":    { kv_unexported, cache_hit_unexported, decode_idle, prefill_idle } }
+  "notes":    { kv_unexported, cache_hit_unexported, slots_unavailable,
+                decode_idle, prefill_idle } }
 point = { "t", "decode_tps", "prefill_tps", "cache_hit_ratio",
           "avg_draft_len", "draft_acceptance", "kv_usage_ratio",
           "requests_processing", "requests_deferred", "context_used_ratio" }
@@ -202,7 +215,11 @@ only move when a request completes. If a counter did not move (idle server),
 the rate is `null` and the chart shows a gap instead of a misleading 0. If a
 counter went backwards (server restart), the window resets. `kv_usage_ratio`
 and `requests_*` are gauges copied from the current sample;
-`context_used_ratio` is the `n_tokens_max` peak over `n_ctx`, not live use.
+`context_used_ratio` is the `n_tokens_max` peak over `n_ctx`, not live use;
+the live figure is `context.live_used / live_capacity`. `kv.usage_ratio` is
+the real gauge when exported; otherwise `kv.estimated` is true and the ratio
+comes from `/slots`. `notes.slots_unavailable` latches true once a poll that
+requested `/slots` got nothing usable, and stays true for the session.
 The analyzers also receive the samples inside the window, which `queue` uses
 for the deepest queue seen.
 

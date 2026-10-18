@@ -7,6 +7,7 @@ from .base import DiagnosisContext
 MIN_PREFILL_TOKENS = 1000
 CPU_BOUND_PREFILL_TPS = 100.0
 MIN_PREFILL_DECODE_RATIO = 2.0
+HIGH_CACHE_HIT_RATIO = 0.5
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,10 @@ def context_used_ratio(n_tokens_max: float | None, n_ctx: float | None) -> float
 def is_cpu_bound(ctx: DiagnosisContext) -> bool | None:
     prefill = prefill_rate(ctx)
     if prefill is None:
+        return None
+    hit = ctx.metrics.cache_hit_ratio if ctx.metrics is not None else None
+    if prefill.source == "lifetime" and hit is not None and hit >= HIGH_CACHE_HIT_RATIO:
+        # Cached tokens inflate the prompt total, so the lifetime rate cannot prove CPU-bound prefill.
         return None
     if prefill.value < CPU_BOUND_PREFILL_TPS:
         return True
