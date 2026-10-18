@@ -62,7 +62,7 @@ findings
   OK   connectivity.ok  Endpoints available
   OK   decode.ok  Decode throughput is healthy
   OK   prefix_cache.ok  Prefix cache is effective
-  OK   kv.ok  KV cache sizing is healthy
+  OK   kv.ok  KV cache usage is well below capacity
   OK   queue.ok  No requests queued
   OK   spec.ok  Speculative decoding is healthy
   N/A  memory.insufficient_data  Memory estimate unavailable
@@ -136,7 +136,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 
 ## Checks
 
-The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache sizing, context window, request queue, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
+The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache usage and context oversizing, context window, request queue, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
 
 Two findings that the server above does not trigger but other setups do:
 
