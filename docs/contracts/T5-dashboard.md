@@ -94,8 +94,9 @@ severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"hig
   `key value` list. `recs-list` is an `<ol>` of `report.recommendations`,
   each with an impact tag, the action, the flag in `<code>`, and the
   rationale in secondary text. `skipped-list` sits inside a `<details>`
-  summarized as `N checks skipped (insufficient data)`, plus OK checks
-  listed as passed.
+  summarized as `R run, S skipped`: R counts every finding that is not
+  insufficient data, S the insufficient ones. The list shows the skipped
+  checks plus the OK checks marked as passed.
 
 ## app.css (dark theme, tokens as CSS custom properties on `:root`)
 

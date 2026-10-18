@@ -7,6 +7,7 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
+from llama_doctor.analysis.base import HostHints
 from llama_doctor.cli import EXIT_TOOL_ERROR, main
 
 from .support import FakeLlamaServer, load_fixture
@@ -60,7 +61,20 @@ class TestCli(unittest.TestCase):
             result, stdout, _ = self._run(["diagnose", server.url])
 
         self.assertEqual(result, 1)
-        self.assertIn("kv.context_oversized", stdout)
+        self.assertIn("context.oversized", stdout)
+
+    def test_serve_passes_vram_gib_to_dashboard(self):
+        with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
+            result, _, _ = self._run(["serve", "http://127.0.0.1:1", "--vram-gib", "24"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(run.call_args.kwargs["hints"], HostHints(vram_gib=24.0))
+
+    def test_serve_without_vram_gib_passes_empty_hints(self):
+        with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
+            self._run(["serve", "http://127.0.0.1:1"])
+
+        self.assertEqual(run.call_args.kwargs["hints"], HostHints())
 
     def test_json_output(self):
         with FakeLlamaServer() as server:
@@ -193,7 +207,7 @@ class TestCli(unittest.TestCase):
         with patch.dict(sys.modules, {"llama_doctor.dashboard.server": dashboard_server}):
             result, stdout, _ = self._run(
                 ["serve", "http://server", "--host", "0.0.0.0", "--port", "9000",
-                 "--interval", "3.5", "--history", "20", "--rate-window", "45"]
+                 "--interval", "3.5", "--history", "20", "--rate-window", "45", "--vram-gib", "12"]
             )
 
         self.assertEqual(result, 17)
@@ -203,7 +217,8 @@ class TestCli(unittest.TestCase):
         self.assertEqual(args[0].base_url, "http://server")
         self.assertEqual(
             {key: value for key, value in kwargs.items() if key != "out"},
-            {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20, "rate_window": 45.0},
+            {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20, "rate_window": 45.0,
+             "hints": HostHints(vram_gib=12.0)},
         )
 
     def test_serve_rejects_non_positive_rate_window(self):

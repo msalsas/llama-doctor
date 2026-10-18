@@ -54,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--rate-window", type=_positive_float, default=30.0, metavar="SEC")
     serve_parser.add_argument("--api-key-env", metavar="VAR")
     serve_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
+    serve_parser.add_argument("--vram-gib", type=float, metavar="N")
     return parser
 
 
@@ -90,6 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             interval=args.interval,
             history=args.history,
             rate_window=args.rate_window,
+            hints=HostHints(vram_gib=args.vram_gib),
             out=sys.stderr,
         )
 

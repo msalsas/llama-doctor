@@ -7,6 +7,7 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any, TextIO
 
+from llama_doctor.analysis.base import HostHints
 from llama_doctor.catalog import METRICS
 from llama_doctor.client import LlamaClient
 
@@ -176,6 +177,7 @@ def run(
     history: int,
     out: TextIO,
     rate_window: float = DEFAULT_RATE_WINDOW,
+    hints: HostHints = HostHints(),  # noqa: B008
 ) -> int:
     try:
         server = make_server(lambda: sampler.state(), host=host, port=port)
@@ -188,6 +190,7 @@ def run(
         interval=interval,
         history=history,
         rate_window=rate_window,
+        hints=hints,
     )
     try:
         sampler.start()

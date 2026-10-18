@@ -6,7 +6,7 @@ from typing import Any
 
 from llama_doctor import __version__
 from llama_doctor.analysis import BUILTIN_ANALYZERS, diagnose
-from llama_doctor.analysis.base import AnalyzerSpec, DiagnosisContext, Report
+from llama_doctor.analysis.base import AnalyzerSpec, DiagnosisContext, HostHints, Report
 from llama_doctor.analysis.signals import context_used_ratio
 from llama_doctor.models import MetricsSnapshot, PropsSnapshot, ServerSnapshot
 from llama_doctor.serialize import (
@@ -148,8 +148,10 @@ class Sampler:
         history: int = DEFAULT_HISTORY,
         rate_window: float = DEFAULT_RATE_WINDOW,
         analyzers: Sequence[AnalyzerSpec] = BUILTIN_ANALYZERS,
+        hints: HostHints = HostHints(),  # noqa: B008
     ) -> None:
         self._fetch = fetch
+        self._hints = hints
         self._target = target
         self._interval = interval
         self._rate_window = rate_window
@@ -172,7 +174,7 @@ class Sampler:
             snapshot = self._fetch()
             with self._lock:
                 baseline, window = self._advance_window(snapshot)
-            context = DiagnosisContext(snapshot, window=window)
+            context = DiagnosisContext(snapshot, hints=self._hints, window=window)
             report = diagnose(context, self._analyzers)
         except Exception as exc:  # noqa: BLE001
             with self._lock:

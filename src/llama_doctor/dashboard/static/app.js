@@ -500,7 +500,7 @@
     skippedList.replaceChildren();
     skipped.forEach((finding) => append(skippedList, "li", `${text(finding.code)}: insufficient data`));
     passed.forEach((finding) => append(skippedList, "li", `${text(finding.code)}: passed`));
-    byId("skipped-list").parentElement.querySelector("summary").textContent = `${skipped.length} checks skipped (insufficient data)`;
+    byId("skipped-list").parentElement.querySelector("summary").textContent = `${findings.length - skipped.length} run, ${skipped.length} skipped`;
   }
 
   function updateBanner(state) {

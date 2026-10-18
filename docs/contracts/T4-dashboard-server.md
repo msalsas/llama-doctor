@@ -34,7 +34,8 @@ class Sampler:
     def __init__(self, fetch: Callable[[], ServerSnapshot], *, target: str,
                  interval: float = DEFAULT_INTERVAL, history: int = DEFAULT_HISTORY,
                  rate_window: float = DEFAULT_RATE_WINDOW,
-                 analyzers: Sequence[AnalyzerSpec] = BUILTIN_ANALYZERS) -> None
+                 analyzers: Sequence[AnalyzerSpec] = BUILTIN_ANALYZERS,
+                 hints: HostHints = HostHints()) -> None
     def tick(self) -> None
     def state(self) -> dict[str, Any]
     def start(self) -> None
@@ -56,8 +57,9 @@ class Sampler:
   samples. The rate baseline is the newest sample at or before
   `taken_at - rate_window` (else the oldest one), because llama.cpp counters
   only move when a request completes; a counter that goes backwards clears
-  the buffer. It then runs `diagnose(DiagnosisContext(snapshot,
-  window=<samples inside the window>), analyzers)` and, if the snapshot has
+  the buffer. It then runs `diagnose(DiagnosisContext(snapshot, hints=hints,
+  window=<samples inside the window>), analyzers)` (so `serve --vram-gib`
+  reaches the memory analyzer) and, if the snapshot has
   metrics, appends `delta_point(baseline, metrics, snapshot.taken_at, n_ctx)`
   to a `deque(maxlen=history)`. Any exception from `fetch` or `diagnose` is
   caught and stored as `errors = {"sampler": type(exc).__name__}`, and the
@@ -91,7 +93,8 @@ def default_static_dir() -> Traversable    # importlib.resources.files("llama_do
 def make_server(state: Callable[[], dict[str, Any]], *, host: str = "127.0.0.1",
                 port: int = 8765, static_dir: Traversable | Path | None = None) -> ThreadingHTTPServer
 def run(client: LlamaClient, *, host: str, port: int, interval: float, history: int,
-        out: TextIO, rate_window: float = DEFAULT_RATE_WINDOW) -> int
+        out: TextIO, rate_window: float = DEFAULT_RATE_WINDOW,
+        hints: HostHints = HostHints()) -> int   # hints go to the Sampler unchanged
 ```
 Handler rules (a `BaseHTTPRequestHandler` subclass built in `make_server`):
 - Only GET and HEAD. Anything else gets 405 with `Allow: GET, HEAD`.

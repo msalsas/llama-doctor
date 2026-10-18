@@ -50,6 +50,18 @@ class TestReadme(unittest.TestCase):
         self.assertEqual(len(labels), 6)
         self.assertIn(", ".join(labels), self.readme)
 
+    def test_install_is_editable_and_pythonpath_runs_from_repo_root(self):
+        install = self.readme.split("## Install", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("pip install -e .", install)
+        self.assertIn("from the repository root", install)
+
+    def test_findings_screenshot_is_embedded(self):
+        self.assertIn("](docs/assets/findings.png)", self.readme)
+
+    def test_serve_documents_vram_gib(self):
+        serve = self.readme.split("`llama-doctor serve URL`", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("`--vram-gib N`", serve)
+
     def test_linked_repo_paths_exist(self):
         paths = re.findall(r"\]\(((?:docs|src)/[^)#]+|LICENSE)\)", self.readme)
         self.assertTrue(paths)

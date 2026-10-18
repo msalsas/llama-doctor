@@ -199,6 +199,14 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn('usePointStyle: true, pointStyle: "line", pointStyleWidth: 28', self.app_js)
         self.assertIn("borderDash: [6, 4]", self.app_js)
 
+    def test_checks_summary_counts_run_and_skipped(self):
+        self.assertIn(
+            ".textContent = `${findings.length - skipped.length} run, ${skipped.length} skipped`;",
+            self.app_js,
+        )
+        self.assertIn("<summary>0 run, 0 skipped</summary>", self.index)
+        self.assertNotIn("checks skipped", self.app_js + self.index)
+
     def test_queue_tile_follows_kv_tile(self):
         self.assertLess(self.index.index('id="tile-kv"'), self.index.index('id="tile-queue"'))
         self.assertIn('"Queue"', self.app_js)

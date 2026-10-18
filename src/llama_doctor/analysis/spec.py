@@ -6,6 +6,7 @@ OFFLOADED_MAX_DRAFT_LEN = 2.0
 RAISE_DRAFT_ACCEPTANCE = 0.7
 RAISE_DRAFT_MAX_LEN = 3.0
 
+
 def analyze(ctx: DiagnosisContext) -> list[Finding]:
     metrics = ctx.metrics
     if metrics is None or metrics.draft_tokens_total is None or metrics.drafts_total is None:

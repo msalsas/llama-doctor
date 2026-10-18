@@ -1,4 +1,4 @@
-from .base import DiagnosisContext, Finding, Severity
+from .base import DiagnosisContext, Finding, Impact, Recommendation, Severity
 from .signals import deferred_peak
 
 
@@ -17,6 +17,13 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
         return [Finding("queue", "queue.deferred", Severity.INFO,
                         "Requests are queued; all slots busy",
                         "Requests had to wait for a free slot because every slot was busy.",
-                        evidence)]
+                        evidence,
+                        (Recommendation("Reduce client concurrency.",
+                                        "Fewer requests in flight leave a slot free for each new one.",
+                                        Impact.MEDIUM),
+                         Recommendation("Raise the slot count, and the context with it.",
+                                        "More slots let more requests run at once, but -c divides across "
+                                        "slots, so raise -c too to keep each slot's context.",
+                                        Impact.MEDIUM, "--parallel")))]
     return [Finding("queue", "queue.ok", Severity.OK, "No requests queued",
                     "Every request found a free slot.", {"deferred_peak": peak})]

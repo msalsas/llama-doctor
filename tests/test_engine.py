@@ -37,7 +37,7 @@ class TestEngine(unittest.TestCase):
         self.assertEqual([finding.code for finding in report.findings],
                          ["moe.higher_impact", "moe.lower_impact"])
 
-    def test_recommendations_deduped_by_flag(self):
+    def test_recommendations_deduped_by_action_and_flag(self):
         unflagged_low = Recommendation("Use a smaller quantization.", "low", Impact.LOW)
         flagged_low = Recommendation("Reduce context conservatively.", "low", Impact.LOW, "-c")
         medium = Recommendation("Tune batch size.", "medium", Impact.MEDIUM, "--batch-size")
@@ -50,7 +50,19 @@ class TestEngine(unittest.TestCase):
                                                            recommendations=(unflagged_high, flagged_high))]),
         ))
         recommendations = report.recommendations()
-        self.assertEqual(recommendations, [unflagged_high, flagged_high, medium])
+        self.assertEqual(recommendations, [unflagged_high, flagged_high, medium, flagged_low])
+
+    def test_opposite_recommendations_for_the_same_flag_both_survive(self):
+        shrink = Recommendation("Set context to 12288.", "A smaller context frees memory.", Impact.MEDIUM, "-c")
+        grow = Recommendation("Raise the context size or shorten prompts.", "Avoid truncation.", Impact.MEDIUM, "-c")
+        duplicate = Recommendation("Set context to 12288.", "Same action again.", Impact.LOW, "-c")
+        report = run_analyzers(make_context(), (
+            AnalyzerSpec("one", "One", lambda _: [Finding("one", "one.warn", Severity.WARN, "One", "One",
+                                                           recommendations=(shrink, duplicate))]),
+            AnalyzerSpec("two", "Two", lambda _: [Finding("two", "two.warn", Severity.WARN, "Two", "Two",
+                                                           recommendations=(grow,))]),
+        ))
+        self.assertEqual(report.recommendations(), [shrink, grow])
 
     def test_recommendations_sorted_by_impact_within_finding(self):
         low = Recommendation("a-action", "a-flag", Impact.LOW)

@@ -4,6 +4,7 @@ MIN_TOKENS = 1000
 LOW_HIT_RATIO = 0.2
 MODERATE_HIT_RATIO = 0.5
 
+
 def analyze(ctx: DiagnosisContext) -> list[Finding]:
     metrics = ctx.metrics
     ratio = metrics.cache_hit_ratio if metrics else None

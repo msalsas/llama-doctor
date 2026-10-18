@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from llama_doctor.analysis.base import HostHints
 from llama_doctor.catalog import METRICS
 from llama_doctor.cli import main
 from llama_doctor.dashboard.server import CSP, is_loopback, make_server, run
@@ -232,6 +233,21 @@ class TestServer(unittest.TestCase):
         out.flush.assert_called_once_with()
         self.assertIn("warning: dashboard has no authentication", out.write.call_args_list[1].args[0])
 
+    def test_run_passes_hints_to_sampler(self):
+        server = Mock()
+        server.serve_forever.side_effect = KeyboardInterrupt
+        client = Mock()
+        client.base_url = "http://server"
+        hints = HostHints(vram_gib=24.0)
+
+        with (
+            patch("llama_doctor.dashboard.server.make_server", return_value=server),
+            patch("llama_doctor.dashboard.server.Sampler", return_value=Mock()) as sampler_class,
+        ):
+            run(client, host="127.0.0.1", port=8765, interval=2.0, history=300, out=Mock(), hints=hints)
+
+        self.assertIs(sampler_class.call_args.kwargs["hints"], hints)
+
     def test_cli_serve_wired(self):
         with patch("llama_doctor.dashboard.server.run", return_value=0) as dashboard_run:
             self.assertEqual(main(["serve", "http://server", "--port", "9999"]), 0)
@@ -245,6 +261,7 @@ class TestServer(unittest.TestCase):
                 "interval": 2.0,
                 "history": 300,
                 "rate_window": 30.0,
+                "hints": HostHints(),
                 "out": kwargs["out"],
             },
         )

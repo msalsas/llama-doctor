@@ -138,9 +138,9 @@ The report sorts findings by severity desc, then by their highest
 recommendation impact desc, then by registry order.
 `Report.recommendations()` flattens them in finding order and sorts stably by
 impact desc, so a playbook's order survives within one impact level. It then
-dedupes by `flag`, or by `action` when `flag` is None, keeping the first
-occurrence. Two analyzers that both suggest `-c` therefore produce one line,
-the higher-impact one.
+dedupes on the `(action, flag)` pair, keeping the first occurrence. Two
+analyzers that suggest `-c` with different actions (shrink it, raise it)
+therefore both show up instead of one silently hiding the other.
 
 Exit codes for `diagnose`: 2 if any CRITICAL, 1 if any WARN, else 0.
 INSUFFICIENT_DATA never fails CI. 3 means a tool or usage error (bad URL,
@@ -154,7 +154,7 @@ Prefill comes first. A CPU-bound prefill is defined as `prefill_tps < 100` or
 almost always means expert tensors are executing from system RAM: CRITICAL
 `prefill.moe_cpu_experts`. Slow decode is reported as a symptom that points
 back to this finding. Remedies, in impact order: smaller quant;
-N-gram/PLE tables to CPU/mmap (`--ple-on-cpu` on models that have them);
+if the loaded model uses PLE/N-gram tables, put them on CPU/mmap (`--ple-on-cpu`);
 MTP/speculative drafting at `--draft-max 2`; smaller `-c` to free VRAM for
 experts.
 
