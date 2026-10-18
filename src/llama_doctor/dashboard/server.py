@@ -178,6 +178,7 @@ def run(
     out: TextIO,
     rate_window: float = DEFAULT_RATE_WINDOW,
     hints: HostHints = HostHints(),  # noqa: B008
+    slots: bool = True,
 ) -> int:
     try:
         server = make_server(lambda: sampler.state(), host=host, port=port)
@@ -185,7 +186,7 @@ def run(
         out.write(f"llama-doctor: cannot bind {host}:{port}: address unavailable\n")
         return 3
     sampler = Sampler(
-        client.snapshot,
+        lambda: client.snapshot(include_slots=slots),
         target=client.base_url,
         interval=interval,
         history=history,

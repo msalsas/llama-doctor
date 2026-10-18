@@ -45,12 +45,14 @@ history: [{t, decode_tps, prefill_tps, cache_hit_ratio, avg_draft_len, draft_acc
                                                        // kv_usage_ratio, requests_* are
                                                        // instantaneous gauges;
                                                        // context_used_ratio is a peak
-context: {used_ratio, n_tokens_max, n_ctx, label},     // label like "78.5k / 80.1k"
+context: {used_ratio, n_tokens_max, n_ctx, label,     // label like "78.5k / 80.1k"
+          live_used?, live_capacity?},                 // only when /slots was read
+kv: {usage_ratio, estimated, evidence: {source, live_used, live_capacity, slots} | null},
 report: {overall, exit_code, findings: [{analyzer, code, severity, title, detail,
          evidence: {k: v}, recommendations: [..]}], recommendations: [{action, rationale,
          impact, flag}]} | null,
 errors: {endpoint: reason},
-notes: {kv_unexported, cache_hit_unexported, decode_idle, prefill_idle}  // show note when true
+notes: {kv_unexported, cache_hit_unexported, slots_unavailable, decode_idle, prefill_idle}  // show note when true
 severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"high","medium","low"}
 ```
 
@@ -75,7 +77,9 @@ severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"hig
   null. KV usage is a gauge with no lifetime average: its hero is the latest
   `kv_usage_ratio`, secondary `current`, or `not exported` when
   `notes.kv_unexported`. Context shows `context.used_ratio` as a percent with
-  `context.label` below it. Queue shows `requests_processing` with
+  `context.label` below it; with `live_capacity` > 0 the hero reads
+  `live X % - peak Y %`. When `kv.estimated`, the KV hero is `~X %` with secondary
+  `estimated from /slots`. Queue shows `requests_processing` with
   `<requests_deferred> waiting` below it.
 - Info tooltips: text comes only from `GET /api/catalog`. Tiles get one
   button (Queue combines `queue_processing` and `queue_deferred`); each chart

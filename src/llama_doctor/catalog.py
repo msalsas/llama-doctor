@@ -42,7 +42,10 @@ METRICS: dict[str, dict[str, str]] = {
             "It is a share of the cache's own capacity and moves with each request: at "
             "90 % or more the cache is saturated, which risks truncation or deferred "
             "requests. Whether the context is oversized is judged from the Context used "
-            "peak, not from this gauge. No current llama-server build exports this "
+            "peak, not from this gauge. When the gauge is missing, the tile shows an "
+            "estimate (live tokens over slot capacity) from /slots; it can read high if "
+            "the server runs with --cache-idle-slots, which keeps idle slots filled, and "
+            "it never raises the saturation warning. No current llama-server build exports this "
             "metric, so the tile and chart normally read not exported; only older "
             "builds still fill them."
         ),
@@ -121,14 +124,17 @@ METRICS: dict[str, dict[str, str]] = {
         "label": "Context used",
         "description": (
             "Peak tokens held in context since the server started (n_tokens_max) as a share of "
-            "n_ctx; it is the highest point observed, not the instantaneous use of the current request."
+            "n_ctx; it is the highest point observed, not the instantaneous use of the current request. "
+            "When /slots is readable the tile reads 'live X % - peak Y %': live is the tokens "
+            "held by the slots right now (prompt plus decoded) over their summed n_ctx, peak is "
+            "this figure."
         ),
         "interpretation": (
             "At 90 % or more the longest conversation nearly hit the window, so raise -c or trim "
             "prompts; under 25 % of a window of 16384 tokens or more, the window is oversized and "
             "-c can shrink to about twice the peak. The peak only resets when llama-server "
-            "restarts, and builds such as Unsloth export only n_tokens_max, so live per-request use "
-            "is not visible."
+            "restarts, and builds such as Unsloth export only n_tokens_max, so without /slots "
+            "live per-request use is not visible."
         ),
     },
 }

@@ -5,7 +5,14 @@ from typing import Any
 
 from .analysis.base import Finding, Recommendation, Report, Severity
 from .analysis.signals import context_used_ratio
-from .models import EndpointError, MetricsSnapshot, ModelsMeta, ProbeResult, PropsSnapshot
+from .models import (
+    EndpointError,
+    MetricsSnapshot,
+    ModelsMeta,
+    ProbeResult,
+    PropsSnapshot,
+    SlotsSnapshot,
+)
 
 
 def severity_name(severity: Severity) -> str:
@@ -82,12 +89,34 @@ def format_tokens(value: float | None) -> str | None:
     return f"{value / 1_000_000:.1f}M"
 
 
-def context_to_dict(metrics: MetricsSnapshot | None, props: PropsSnapshot | None) -> dict[str, Any]:
+def context_to_dict(
+    metrics: MetricsSnapshot | None,
+    props: PropsSnapshot | None,
+    slots: SlotsSnapshot | None = None,
+) -> dict[str, Any]:
     n_tokens_max = metrics.n_tokens_max if metrics else None
     n_ctx = props.n_ctx if props else None
     ratio = context_used_ratio(n_tokens_max, n_ctx)
     label = f"{format_tokens(n_tokens_max)} / {format_tokens(n_ctx)}" if ratio is not None else None
-    return _json_safe({"used_ratio": ratio, "n_tokens_max": n_tokens_max, "n_ctx": n_ctx, "label": label})
+    result: dict[str, Any] = {
+        "used_ratio": ratio, "n_tokens_max": n_tokens_max, "n_ctx": n_ctx, "label": label,
+    }
+    if slots is not None:
+        result["live_used"] = slots.live_used
+        result["live_capacity"] = slots.live_capacity
+    return _json_safe(result)
+
+
+def kv_to_dict(metrics: MetricsSnapshot | None, slots: SlotsSnapshot | None) -> dict[str, Any]:
+    """KV usage: the real gauge when exported, else an estimate from /slots (never saturating)."""
+    gauge = metrics.kv_cache_usage_ratio if metrics else None
+    if gauge is not None:
+        return _json_safe({"usage_ratio": gauge, "estimated": False, "evidence": None})
+    if slots is None:
+        return {"usage_ratio": None, "estimated": False, "evidence": None}
+    return {"usage_ratio": slots.live_used / slots.live_capacity, "estimated": True,
+            "evidence": {"source": "/slots", "live_used": slots.live_used,
+                         "live_capacity": slots.live_capacity, "slots": slots.n_slots}}
 
 
 def probe_to_dict(probe: ProbeResult | None) -> dict[str, Any] | None:

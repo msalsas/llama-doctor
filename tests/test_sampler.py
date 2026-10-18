@@ -352,6 +352,7 @@ class TestSampler(unittest.TestCase):
                 "lifetime",
                 "history",
                 "context",
+                "kv",
                 "report",
                 "errors",
                 "notes",
@@ -369,6 +370,7 @@ class TestSampler(unittest.TestCase):
             {
                 "kv_unexported": False,
                 "cache_hit_unexported": False,
+                "slots_unavailable": False,
                 "decode_idle": False,
                 "prefill_idle": False,
             },

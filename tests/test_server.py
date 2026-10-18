@@ -262,6 +262,7 @@ class TestServer(unittest.TestCase):
                 "history": 300,
                 "rate_window": 30.0,
                 "hints": HostHints(),
+                "slots": True,
                 "out": kwargs["out"],
             },
         )

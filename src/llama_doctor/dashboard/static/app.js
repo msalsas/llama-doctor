@@ -207,8 +207,13 @@
   }
 
   // KV usage is an instantaneous gauge with no lifetime average, so it gets no lifetime line.
-  function renderKvTile(history, unexported) {
+  function renderKvTile(history, unexported, kv) {
     const body = tileValue("tile-kv");
+    if (unexported && kv && kv.estimated === true && number(kv.usage_ratio) !== null) {
+      append(body, "div", `~${percent(number(kv.usage_ratio))}`, "hero");
+      append(body, "div", "estimated from /slots", "secondary");
+      return;
+    }
     if (unexported) {
       append(body, "div", "not exported", "hero");
       return;
@@ -227,7 +232,13 @@
   function renderContextTile(state) {
     const context = state.context && typeof state.context === "object" ? state.context : {};
     const body = tileValue("tile-context");
-    append(body, "div", percent(number(context.used_ratio)), "hero");
+    const used = number(context.live_used);
+    const capacity = number(context.live_capacity);
+    if (used !== null && capacity !== null && capacity > 0) {
+      append(body, "div", `live ${percent(used / capacity)} - peak ${percent(number(context.used_ratio))}`, "hero");
+    } else {
+      append(body, "div", percent(number(context.used_ratio)), "hero");
+    }
     append(body, "div", text(context.label, "n/a"), "secondary");
   }
 
@@ -237,7 +248,7 @@
     renderTile("tile-decode", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
     renderTile("tile-prefill", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
     renderTile("tile-cache", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
-    renderKvTile(history, notes.kv_unexported === true);
+    renderKvTile(history, notes.kv_unexported === true, state.kv && typeof state.kv === "object" ? state.kv : null);
     renderContextTile(state);
     renderQueueTile(history);
   }
@@ -368,6 +379,7 @@
     prefill_idle: "note-prefill",
     kv_unexported: "note-kv",
     cache_hit_unexported: "note-cache-hit",
+    slots_unavailable: "note-slots",
   };
 
   function updateNotes(state) {
