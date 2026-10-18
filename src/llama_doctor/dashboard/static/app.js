@@ -95,7 +95,11 @@
         animation: false, responsive: true, maintainAspectRatio: false, spanGaps: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { display: canvasId === "chart-kv-cache", labels: { color: colors.legend } },
+          // Line swatches carry each dataset's borderDash, so dashed series read as dashed in the legend too.
+          legend: {
+            display: canvasId === "chart-kv-cache",
+            labels: { color: colors.legend, usePointStyle: true, pointStyle: "line", pointStyleWidth: 28 }
+          },
           tooltip: {
             callbacks: {
               label(context) {
@@ -249,6 +253,11 @@
     "hdr-quant": ["quant"],
     "hdr-ctx": ["context_tokens"]
   };
+  // Tiles show a single info button; when one covers several entries each section gets this prefix.
+  const INFO_PREFIX = {
+    queue_processing: "Processing",
+    queue_deferred: "Deferred"
+  };
   let infoCount = 0;
   let catalogLoaded = false;
   let catalogPending = false;
@@ -263,10 +272,13 @@
     return element.previousElementSibling;
   }
 
-  function infoButton(host, metricId, entry) {
-    if (host.querySelector(`[data-metric="${metricId}"]`)) {
+  // items: [{ metricId, entry }]; more than one item renders prefixed sections in one tooltip.
+  function infoButton(host, items) {
+    const key = items.map((item) => item.metricId).join(" ");
+    if (host.querySelector(`[data-metric="${key}"]`)) {
       return;
     }
+    const combined = items.length > 1;
     infoCount += 1;
     const tipId = `info-tip-${infoCount}`;
     const wrap = document.createElement("span");
@@ -274,16 +286,22 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "info";
-    button.dataset.metric = metricId;
+    button.dataset.metric = key;
     button.textContent = "i";
-    button.setAttribute("aria-label", `About ${text(entry.label, metricId)}`);
+    const labels = items.map(({ metricId, entry }) => text(entry.label, metricId));
+    button.setAttribute("aria-label", `About ${labels.join(" and ")}`);
     button.setAttribute("aria-describedby", tipId);
     const tip = document.createElement("span");
     tip.id = tipId;
     tip.className = "chart-note info-tip";
     tip.setAttribute("role", "tooltip");
-    append(tip, "span", text(entry.description, ""));
-    append(tip, "span", text(entry.interpretation, ""));
+    items.forEach(({ metricId, entry }, index) => {
+      const description = append(tip, "span", text(entry.description, ""));
+      if (combined) {
+        description.prepend(`${INFO_PREFIX[metricId] || labels[index]}: `);
+      }
+      append(tip, "span", text(entry.interpretation, ""), "info-interp");
+    });
     // Escape hides the tooltip without moving focus or the pointer.
     button.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -300,13 +318,18 @@
       throw new Error("invalid catalog");
     }
     Object.entries(METRIC_INFO).forEach(([elementId, metricIds]) => {
-      const host = infoHost(byId(elementId));
-      metricIds.forEach((metricId) => {
-        const entry = catalog[metricId];
-        if (entry && typeof entry === "object") {
-          infoButton(host, metricId, entry);
+      const element = byId(elementId);
+      const host = infoHost(element);
+      const items = metricIds
+        .map((metricId) => ({ metricId, entry: catalog[metricId] }))
+        .filter(({ entry }) => entry && typeof entry === "object");
+      if (element.classList.contains("tile")) {
+        if (items.length) {
+          infoButton(host, items);
         }
-      });
+      } else {
+        items.forEach((item) => infoButton(host, [item]));
+      }
     });
   }
 

@@ -191,6 +191,10 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn('{ label: "Context used", key: "context_used_ratio", format: percent }', self.app_js)
         self.assertRegex(self.app_css, r"--s-ctx\s*:")
 
+    def test_legend_swatches_are_lines_that_keep_dataset_dash(self):
+        self.assertIn('usePointStyle: true, pointStyle: "line", pointStyleWidth: 28', self.app_js)
+        self.assertIn("borderDash: [6, 4]", self.app_js)
+
     def test_queue_tile_follows_kv_tile(self):
         self.assertLess(self.index.index('id="tile-kv"'), self.index.index('id="tile-queue"'))
         self.assertIn('"Queue"', self.app_js)
@@ -207,6 +211,15 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn('setAttribute("role", "tooltip")', self.app_js)
         self.assertIn("entry.description", self.app_js)
         self.assertIn("entry.interpretation", self.app_js)
+
+    def test_tiles_get_one_info_button_with_prefixed_sections(self):
+        self.assertIn('if (element.classList.contains("tile")) {', self.app_js)
+        self.assertIn("infoButton(host, items);", self.app_js)
+        self.assertIn("items.forEach((item) => infoButton(host, [item]));", self.app_js)
+        self.assertRegex(self.app_js, r'queue_processing: "Processing",\s*queue_deferred: "Deferred"')
+        self.assertIn('description.prepend(`${INFO_PREFIX[metricId] || labels[index]}: `);', self.app_js)
+        self.assertIn('button.setAttribute("aria-label", `About ${labels.join(" and ")}`);', self.app_js)
+        self.assertRegex(self.app_css, r"\.info-tip \.info-interp\s*\{")
 
     def test_info_button_is_a_real_button(self):
         self.assertIn('document.createElement("button")', self.app_js)

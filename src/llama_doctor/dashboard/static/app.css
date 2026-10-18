@@ -115,7 +115,8 @@ canvas { max-width: 100%; }
   text-transform: none;
 }
 .info-tip span { display: block; }
-.info-tip span + span { margin-top: 4px; color: var(--text-3); }
+.info-tip span + span { margin-top: 4px; }
+.info-tip .info-interp { color: var(--text-3); }
 .info:hover + .info-tip,
 .info:focus + .info-tip,
 .info:focus-visible + .info-tip,
