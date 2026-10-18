@@ -45,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose_parser.add_argument("--ram-gib", type=float, metavar="N")
     diagnose_parser.add_argument("--weights-gib", type=float, metavar="N")
     diagnose_parser.add_argument("--no-color", action="store_true")
+    diagnose_parser.add_argument("--no-slots", action="store_true")
 
     serve_parser = commands.add_parser("serve")
     serve_parser.add_argument("url", metavar="URL")
@@ -58,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--vram-gib", type=float, metavar="N")
     serve_parser.add_argument("--ram-gib", type=float, metavar="N")
     serve_parser.add_argument("--weights-gib", type=float, metavar="N")
+    serve_parser.add_argument("--no-slots", action="store_true")
     return parser
 
 
@@ -97,10 +99,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             hints=HostHints(
                 vram_gib=args.vram_gib, ram_gib=args.ram_gib, weights_gib=args.weights_gib
             ),
+            slots=not args.no_slots,
             out=sys.stderr,
         )
 
-    snapshot = client.snapshot()
+    snapshot = client.snapshot(include_slots=not args.no_slots)
     probe = None
     if args.probe and snapshot.alive:
         print("probe: warm-up plus one synthetic prompt (prefix cache disabled)", file=sys.stderr)

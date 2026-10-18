@@ -66,6 +66,11 @@ class TestCatalog(unittest.TestCase):
                 self.assertIn("the speculative mechanism (separate draft model or MTP head)", text)
                 self.assertNotIn("the draft model", text.replace("separate draft model", ""))
 
+    def test_live_vs_peak_and_idle_slots_explained(self):
+        self.assertIn("live", METRICS["context_used"]["description"])
+        self.assertIn("peak", METRICS["context_used"]["description"])
+        self.assertIn("--cache-idle-slots", METRICS["kv_usage"]["interpretation"])
+
     def test_kv_usage_says_no_current_server_exports_it(self):
         text = METRICS["kv_usage"]["interpretation"]
         self.assertIn("No current llama-server build exports", text)

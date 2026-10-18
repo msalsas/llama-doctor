@@ -13,7 +13,7 @@ The live dashboard on an RTX 5080 rig running Unsloth Studio, serving Qwen3.8-Fl
 ## What it does
 
 - Reads `/metrics`, `/props` and `/v1/models` over HTTP. It never attaches to, restarts or reconfigures the server process.
-- Runs 10 analyzers that emit 42 distinct findings across connectivity, prefill and decode throughput, memory, cache, context sizing, request queueing, speculative decoding, quantization and expert offload.
+- Runs 10 analyzers that emit 43 distinct findings across connectivity, prefill and decode throughput, memory, cache, context sizing, request queueing, speculative decoding, quantization and expert offload.
 - Ranks recommendations by impact and names the server flag to change.
 - Returns an exit code per severity, so you can gate CI jobs or cron checks on it.
 - Optionally serves a local dashboard with live charts and findings.
@@ -91,8 +91,8 @@ llama-doctor serve http://127.0.0.1:8080
 Tiles, left to right: Decode tok/s, Prefill tok/s, Prefix-cache hit, KV usage, Context, Queue.
 
 - Decode, Prefill and Prefix-cache hit show the latest windowed value, with the lifetime average below it (or only the lifetime average while the server is idle).
-- KV usage is the current share of KV cache cells in use (`kv_cache_usage_ratio`), or `not exported` on servers that omit it. `kv.saturated` warns at 90 % or more.
-- Context shows the peak tokens held in context as a share of `n_ctx` (`n_tokens_max / n_ctx`, for example `98.0 %` and `78.5k / 80.1k`). It is the highest point since the server started, not live use. `context.near_limit` warns at 90 % or more.
+- KV usage is the current share of KV cache cells in use (`kv_cache_usage_ratio`), or `not exported` on servers that omit it. When it is omitted but `/slots` is readable, the tile shows an estimate (`~X %`, live tokens over slot capacity, `kv.estimated`); it can read high if the server runs with `--cache-idle-slots`. `kv.saturated` warns at 90 % or more and only from the real gauge.
+- Context shows the peak tokens held in context as a share of `n_ctx` (`n_tokens_max / n_ctx`, for example `98.0 %` and `78.5k / 80.1k`). The peak is the highest point since the server started, not live use; when `/slots` is readable the tile reads `live X % - peak Y %`, where live is the tokens held by the slots right now (prompt plus decoded) over their summed `n_ctx`. `context.near_limit` warns at 90 % or more.
 - Queue shows requests being processed and, below it, requests deferred while waiting for a free slot (`requests_processing`, `requests_deferred`).
 
 Charts:
@@ -121,6 +121,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
 | `--timeout SEC` | HTTP timeout per request. |
 | `--no-color` | Disable ANSI colour in text output. |
+| `--no-slots` | Do not read `GET /slots` (live context and the KV estimate). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
 
 `--probe` is off by default. It is the only option that sends a write request to the server; everything else is a read-only GET.
 
@@ -136,6 +137,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--vram-gib N` | GPU memory available, same as in `diagnose`; without it the memory check stays N/A on the dashboard. |
 | `--ram-gib N` | System RAM available for offloaded weights, same as in `diagnose`. |
 | `--weights-gib N` | Model weight size in GiB, same as in `diagnose`; the size reported by the server wins when present. |
+| `--no-slots` | Do not poll `GET /slots`, same as in `diagnose`; the context tile then shows only the peak. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.
 

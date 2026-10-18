@@ -243,7 +243,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(
             {key: value for key, value in kwargs.items() if key != "out"},
             {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20, "rate_window": 45.0,
-             "hints": HostHints(vram_gib=12.0)},
+             "hints": HostHints(vram_gib=12.0), "slots": True},
         )
 
     def test_serve_rejects_non_positive_rate_window(self):

@@ -14,9 +14,11 @@ from .models import (
     ModelsMeta,
     PropsSnapshot,
     ServerSnapshot,
+    SlotsSnapshot,
 )
 from .promparse import parse_prometheus
 from .redact import Secret, safe_float, safe_int
+from .slots import parse_slots
 
 DEFAULT_TIMEOUT: float = 5.0
 MAX_BODY_BYTES: int = 4 * 1024 * 1024
@@ -135,7 +137,13 @@ class LlamaClient:
     def fetch_models(self) -> ModelsMeta:
         return ModelsMeta.from_payload(self._fetch_json("/v1/models"))
 
-    def snapshot(self) -> ServerSnapshot:
+    def fetch_slots(self) -> SlotsSnapshot:
+        slots = parse_slots(self._fetch_json("/slots"))
+        if slots is None:
+            raise FetchError("/slots", "unusable response")
+        return slots
+
+    def snapshot(self, include_slots: bool = False) -> ServerSnapshot:
         taken_at = self._clock()
         metrics: MetricsSnapshot | None = None
         props: PropsSnapshot | None = None
@@ -153,12 +161,21 @@ class LlamaClient:
             models = self.fetch_models()
         except FetchError as exc:
             errors["/v1/models"] = exc.to_endpoint_error()
+        slots: SlotsSnapshot | None = None
+        slots_error: str | None = None
+        if include_slots:
+            try:
+                slots = self.fetch_slots()
+            except FetchError as exc:
+                slots_error = exc.reason
         return ServerSnapshot(
             taken_at=taken_at,
             metrics=metrics,
             props=props,
             models=models,
             errors=errors,
+            slots=slots,
+            slots_error=slots_error,
         )
 
     def complete(self, prompt: str, n_predict: int) -> CompletionTimings:

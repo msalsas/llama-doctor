@@ -8,10 +8,11 @@ from llama_doctor import __version__
 from llama_doctor.analysis import BUILTIN_ANALYZERS, diagnose
 from llama_doctor.analysis.base import AnalyzerSpec, DiagnosisContext, HostHints, Report
 from llama_doctor.analysis.signals import context_used_ratio
-from llama_doctor.models import MetricsSnapshot, PropsSnapshot, ServerSnapshot
+from llama_doctor.models import MetricsSnapshot, PropsSnapshot, ServerSnapshot, SlotsSnapshot
 from llama_doctor.serialize import (
     context_to_dict,
     errors_to_dict,
+    kv_to_dict,
     props_to_dict,
     rates_to_dict,
     report_to_dict,
@@ -166,6 +167,8 @@ class Sampler:
         self._metrics: MetricsSnapshot | None = None
         self._props: PropsSnapshot | None = None
         self._report: Report | None = None
+        self._slots: SlotsSnapshot | None = None
+        self._slots_unavailable = False
         self._errors: dict[str, Any] = {}
         self._updated_at: float | None = None
 
@@ -184,6 +187,8 @@ class Sampler:
         with self._lock:
             self._props = snapshot.server_props
             self._metrics = snapshot.metrics
+            self._slots = snapshot.slots
+            self._slots_unavailable = snapshot.slots_error is not None
             self._report = report
             self._errors = errors_to_dict(snapshot.errors)
             self._updated_at = snapshot.taken_at
@@ -233,6 +238,7 @@ class Sampler:
             "kv_unexported": metrics is not None and metrics.kv_cache_usage_ratio is None,
             "cache_hit_unexported": metrics is not None
             and metrics.prompt_tokens_cached_total is None,
+            "slots_unavailable": self._slots_unavailable,
             "decode_idle": idle("decode_tps"),
             "prefill_idle": idle("prefill_tps"),
         }
@@ -249,7 +255,8 @@ class Sampler:
                 "server": props_to_dict(self._props),
                 "lifetime": lifetime,
                 "history": list(self._history),
-                "context": context_to_dict(self._metrics, self._props),
+                "context": context_to_dict(self._metrics, self._props, self._slots),
+                "kv": kv_to_dict(self._metrics, self._slots),
                 "report": report_to_dict(self._report) if self._report is not None else None,
                 "errors": dict(self._errors),
                 "notes": self._notes(lifetime),

@@ -69,11 +69,16 @@ class Sampler:
   `rate_window_s`, `updated_at` (taken_at of the last successful tick, else
   None), `server` (`props_to_dict`), `lifetime` (`rates_to_dict` of the latest
   metrics), `history` (list, oldest first), `context` (`context_to_dict`:
-  `used_ratio`, `n_tokens_max`, `n_ctx`, `label`), `report` (`report_to_dict` or None),
+  `used_ratio`, `n_tokens_max`, `n_ctx`, `label`, plus `live_used` and
+  `live_capacity` only when `/slots` was read), `kv` (`kv_to_dict`: `usage_ratio`,
+  `estimated`, `evidence`; the estimate is live_used/live_capacity from `/slots`
+  with `estimated: true` and never feeds `kv.saturated`), `report` (`report_to_dict` or None),
   `errors` (`errors_to_dict`, or the sampler error dict), and `notes`
   (booleans for chart notes). `kv_unexported` / `cache_hit_unexported`:
   the latest metrics lack `kv_cache_usage_ratio` /
-  `prompt_tokens_cached_total`. `decode_idle` / `prefill_idle`: the lifetime
+  `prompt_tokens_cached_total`. `slots_unavailable`: `/slots` was requested
+  (no `--no-slots`) and failed or was unusable; it is a sticky boolean, so the
+  warning is not repeated per poll. `decode_idle` / `prefill_idle`: the lifetime
   rate is known, history has at least 2 points, and every window rate is null.
 - `start()` launches a daemon thread named `llama-doctor-sampler`. Its loop
   is `tick()` then `stop_event.wait(interval)`. `stop()` sets the event and

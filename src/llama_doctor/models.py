@@ -335,12 +335,25 @@ class ProbeResult:
 
 
 @dataclass(frozen=True)
+class SlotsSnapshot:
+    """Numbers summed over the server's slots; never any prompt text or ids."""
+
+    live_used: int
+    live_capacity: int
+    n_slots: int
+    n_processing: int
+
+
+@dataclass(frozen=True)
 class ServerSnapshot:
     taken_at: float
     metrics: MetricsSnapshot | None
     props: PropsSnapshot | None
     models: ModelsMeta | None
     errors: Mapping[str, EndpointError]
+    slots: SlotsSnapshot | None = None
+    # Why /slots yielded nothing; None when it was skipped or succeeded.
+    slots_error: str | None = None
 
     @property
     def alive(self) -> bool:
