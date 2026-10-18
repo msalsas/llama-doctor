@@ -20,6 +20,14 @@
     return typeof value === "string" || typeof value === "number" ? String(value) : fallback;
   }
 
+  // Evidence arrives at full precision; round only here: 1 decimal, or 3 below 1 so ratios stay readable.
+  function displayNumber(value) {
+    if (typeof value !== "number" || Number.isInteger(value)) {
+      return text(value, "n/a");
+    }
+    return String(Number(value.toFixed(Math.abs(value) >= 1 ? 1 : 3)));
+  }
+
   function rate(value) {
     const valueNumber = number(value);
     return valueNumber === null ? "n/a" : valueNumber.toFixed(1);
@@ -295,7 +303,7 @@
       if (finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)) {
         const evidence = document.createElement("ul");
         evidence.className = "evidence";
-        Object.entries(finding.evidence).forEach(([key, value]) => append(evidence, "li", `${key} ${text(value, "n/a")}`));
+        Object.entries(finding.evidence).forEach(([key, value]) => append(evidence, "li", `${key} ${displayNumber(value)}`));
         row.append(evidence);
       }
       list.append(row);

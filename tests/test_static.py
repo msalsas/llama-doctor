@@ -108,6 +108,11 @@ class TestStaticFiles(unittest.TestCase):
     def test_axis_titles_break_before_unit(self):
         self.assertIn("text: caption.split(/ (?=\\()/)", self.app_js)
 
+    def test_evidence_numbers_are_rounded_only_for_display(self):
+        self.assertIn("function displayNumber(value)", self.app_js)
+        self.assertIn("Math.abs(value) >= 1 ? 1 : 3", self.app_js)
+        self.assertIn("`${key} ${displayNumber(value)}`", self.app_js)
+
     def test_kv_tile_says_not_exported_without_lifetime_line(self):
         self.assertIn('"not exported"', self.app_js)
         self.assertIn("notes.kv_unexported === true", self.app_js)

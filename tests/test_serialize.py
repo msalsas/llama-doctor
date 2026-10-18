@@ -2,10 +2,9 @@ import json
 import unittest
 
 from llama_doctor.analysis import diagnose
-from llama_doctor.analysis.base import Finding, Severity
+from llama_doctor.analysis.base import Finding, Report, Severity
 from llama_doctor.models import EndpointError, MetricsSnapshot
 from llama_doctor.serialize import (
-    display_number,
     errors_to_dict,
     finding_to_dict,
     props_to_dict,
@@ -34,36 +33,31 @@ class TestSerialize(unittest.TestCase):
         self.assertIsNone(rates["prefill_tps"])
         json.dumps({"finding": finding_to_dict(finding), "rates": rates}, allow_nan=False)
 
-    def test_evidence_floats_are_rounded_for_display(self):
+    def test_evidence_floats_keep_full_precision(self):
         finding = Finding("test", "test.value", Severity.OK, "Test", "Test",
                           {"prefill_tps": 132.60928071193192, "decode_tps": 24.591443296157937,
                            "hit_ratio": 0.1111111, "cpu_bound": True, "suggested_ctx": 8192,
                            "source": "lifetime", "missing": None})
         self.assertEqual(finding_to_dict(finding)["evidence"], {
-            "prefill_tps": 132.6, "decode_tps": 24.6, "hit_ratio": 0.111, "cpu_bound": True,
-            "suggested_ctx": 8192, "source": "lifetime", "missing": None,
+            "prefill_tps": 132.60928071193192, "decode_tps": 24.591443296157937, "hit_ratio": 0.1111111,
+            "cpu_bound": True, "suggested_ctx": 8192, "source": "lifetime", "missing": None,
         })
 
-    def test_evidence_rounding_leaves_finding_untouched(self):
+    def test_nested_non_finite_evidence_is_sanitized(self):
         finding = Finding("test", "test.value", Severity.OK, "Test", "Test",
-                          {"decode_tps": 24.591443296157937})
-        finding_to_dict(finding)
-        self.assertEqual(finding.evidence["decode_tps"], 24.591443296157937)
+                          {"samples": [1.5, float("nan")], "window": {"peak": float("-inf"), "mean": 2.25}})
+        self.assertEqual(finding_to_dict(finding)["evidence"],
+                         {"samples": [1.5, None], "window": {"peak": None, "mean": 2.25}})
+
+    def test_report_keeps_full_precision_and_sanitizes(self):
+        finding = Finding("test", "test.value", Severity.WARN, "Test", "Test",
+                          {"prefill_tps": 132.60928071193192, "nan": float("nan")})
+        evidence = report_to_dict(Report((finding,)))["findings"][0]["evidence"]
+        self.assertEqual(evidence, {"prefill_tps": 132.60928071193192, "nan": None})
 
     def test_rates_keep_full_precision(self):
         rates = rates_to_dict(MetricsSnapshot(prompt_tokens_total=1000, prompt_seconds_total=3))
         self.assertAlmostEqual(rates["prefill_tps"], 1000 / 3, places=9)
-
-    def test_display_number(self):
-        self.assertEqual(display_number(132.60928071193192), 132.6)
-        self.assertEqual(display_number(-24.55), -24.6)
-        self.assertEqual(display_number(0.75), 0.75)
-        self.assertEqual(display_number(0.0004), 0.0)
-        self.assertEqual(display_number(1.0), 1.0)
-        self.assertIs(display_number(True), True)
-        self.assertEqual(display_number(7), 7)
-        self.assertIsNone(display_number(float("nan")))
-        self.assertEqual(display_number("x"), "x")
 
     def test_severity_names(self):
         self.assertEqual(severity_name(Severity.INSUFFICIENT_DATA), "insufficient_data")
