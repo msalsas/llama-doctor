@@ -9,7 +9,7 @@ from typing import Any, TextIO
 
 from llama_doctor.client import LlamaClient
 
-from .sampler import Sampler
+from .sampler import DEFAULT_RATE_WINDOW, Sampler
 
 STATIC_ROUTES: dict[str, str] = {
     "/": "index.html",
@@ -170,6 +170,7 @@ def run(
     interval: float,
     history: int,
     out: TextIO,
+    rate_window: float = DEFAULT_RATE_WINDOW,
 ) -> int:
     try:
         server = make_server(lambda: sampler.state(), host=host, port=port)
@@ -181,6 +182,7 @@ def run(
         target=client.base_url,
         interval=interval,
         history=history,
+        rate_window=rate_window,
     )
     try:
         sampler.start()

@@ -22,6 +22,13 @@ class _ArgumentParser(argparse.ArgumentParser):
         self.exit(EXIT_TOOL_ERROR, f"{self.prog}: error: {message}\n")
 
 
+def _positive_float(value: str) -> float:
+    number = float(value)
+    if not number > 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the llama-doctor command-line parser."""
     parser = _ArgumentParser(prog="llama-doctor")
@@ -44,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--port", type=int, default=8765)
     serve_parser.add_argument("--interval", type=float, default=2.0)
     serve_parser.add_argument("--history", type=int, default=300)
+    serve_parser.add_argument("--rate-window", type=_positive_float, default=30.0, metavar="SEC")
     serve_parser.add_argument("--api-key-env", metavar="VAR")
     serve_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     return parser
@@ -81,6 +89,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             port=args.port,
             interval=args.interval,
             history=args.history,
+            rate_window=args.rate_window,
             out=sys.stderr,
         )
 

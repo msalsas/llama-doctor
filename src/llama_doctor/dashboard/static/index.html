@@ -32,12 +32,12 @@
     </section>
     <section class="dashboard-grid">
       <article class="panel">
-        <h2>Decode throughput</h2>
+        <h2>Decode throughput <span class="secondary rate-window"></span></h2>
         <div class="chart-wrap"><canvas id="chart-decode" aria-label="Decode throughput in tokens per second" role="img"></canvas></div>
         <details><summary>Recent decode points</summary><div class="table-wrap" data-table="decode"></div></details>
       </article>
       <article class="panel">
-        <h2>Prefill throughput</h2>
+        <h2>Prefill throughput <span class="secondary rate-window"></span></h2>
         <div class="chart-wrap"><canvas id="chart-prefill" aria-label="Prefill throughput in tokens per second" role="img"></canvas></div>
         <details><summary>Recent prefill points</summary><div class="table-wrap" data-table="prefill"></div></details>
       </article>
@@ -47,7 +47,7 @@
         <details><summary>Recent KV and cache points</summary><div class="table-wrap" data-table="kv-cache"></div></details>
       </article>
       <article class="panel speculative">
-        <h2>Speculative decoding</h2>
+        <h2>Speculative decoding <span class="secondary rate-window"></span></h2>
         <div class="chart-wrap"><canvas id="chart-draft-len" aria-label="Average draft length in tokens" role="img"></canvas></div>
         <div class="chart-wrap"><canvas id="chart-acceptance" aria-label="Draft acceptance percentage" role="img"></canvas></div>
         <details><summary>Recent speculative-decoding points</summary><div class="table-wrap" data-table="speculative"></div></details>

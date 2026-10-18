@@ -193,7 +193,7 @@ class TestCli(unittest.TestCase):
         with patch.dict(sys.modules, {"llama_doctor.dashboard.server": dashboard_server}):
             result, stdout, _ = self._run(
                 ["serve", "http://server", "--host", "0.0.0.0", "--port", "9000",
-                 "--interval", "3.5", "--history", "20"]
+                 "--interval", "3.5", "--history", "20", "--rate-window", "45"]
             )
 
         self.assertEqual(result, 17)
@@ -203,8 +203,23 @@ class TestCli(unittest.TestCase):
         self.assertEqual(args[0].base_url, "http://server")
         self.assertEqual(
             {key: value for key, value in kwargs.items() if key != "out"},
-            {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20},
+            {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20, "rate_window": 45.0},
         )
+
+    def test_serve_rejects_non_positive_rate_window(self):
+        dashboard_server = types.ModuleType("llama_doctor.dashboard.server")
+        dashboard_server.run = Mock(return_value=0)
+        for value in ("0", "-5", "nan"):
+            with self.subTest(value=value), patch.dict(
+                sys.modules, {"llama_doctor.dashboard.server": dashboard_server}
+            ):
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                    main(["serve", "http://server", "--rate-window", value])
+
+                self.assertEqual(raised.exception.code, EXIT_TOOL_ERROR)
+                self.assertIn("argument --rate-window: must be > 0", stderr.getvalue())
+        dashboard_server.run.assert_not_called()
 
 
 if __name__ == "__main__":

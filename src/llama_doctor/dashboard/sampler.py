@@ -1,6 +1,6 @@
 from collections import deque
 from collections.abc import Callable, Sequence
-from math import isfinite
+from math import ceil, isfinite
 from threading import Event, Lock, Thread, current_thread
 from typing import Any
 
@@ -12,6 +12,7 @@ from llama_doctor.serialize import errors_to_dict, props_to_dict, rates_to_dict,
 
 DEFAULT_INTERVAL = 2.0
 DEFAULT_HISTORY = 300
+DEFAULT_RATE_WINDOW = 30.0
 POINT_KEYS = (
     "t",
     "decode_tps",
@@ -58,6 +59,11 @@ def _delta_rate(
 def delta_point(
     prev: MetricsSnapshot | None, cur: MetricsSnapshot, t: float
 ) -> dict[str, float | None]:
+    """Rates between a baseline snapshot and ``cur``; ``prev`` is the window baseline.
+
+    llama.cpp counters only move when a request completes, so the sampler passes the
+    newest snapshot at or before the window start rather than the adjacent sample.
+    """
     point: dict[str, float | None] = {
         "t": t,
         "decode_tps": None,
@@ -109,6 +115,17 @@ def delta_point(
     return point
 
 
+def _counters_reset(prev: MetricsSnapshot, cur: MetricsSnapshot) -> bool:
+    """True when a monotonic token counter went backwards (llama-server restarted)."""
+    return any(
+        before is not None and after is not None and after < before
+        for before, after in (
+            (prev.tokens_predicted_total, cur.tokens_predicted_total),
+            (prev.prompt_tokens_total, cur.prompt_tokens_total),
+        )
+    )
+
+
 class Sampler:
     def __init__(
         self,
@@ -117,17 +134,21 @@ class Sampler:
         target: str,
         interval: float = DEFAULT_INTERVAL,
         history: int = DEFAULT_HISTORY,
+        rate_window: float = DEFAULT_RATE_WINDOW,
         analyzers: Sequence[AnalyzerSpec] = BUILTIN_ANALYZERS,
     ) -> None:
         self._fetch = fetch
         self._target = target
         self._interval = interval
+        self._rate_window = rate_window
         self._analyzers = analyzers
         self._history: deque[dict[str, float | None]] = deque(maxlen=history)
         self._lock = Lock()
         self._stop_event = Event()
         self._thread: Thread | None = None
-        self._prev_metrics: MetricsSnapshot | None = None
+        self._recent: deque[tuple[float, MetricsSnapshot]] = deque(
+            maxlen=max(4, ceil(rate_window / interval) + 2)
+        )
         self._metrics: MetricsSnapshot | None = None
         self._props: PropsSnapshot | None = None
         self._report: Report | None = None
@@ -150,10 +171,22 @@ class Sampler:
             self._errors = errors_to_dict(snapshot.errors)
             self._updated_at = snapshot.taken_at
             if snapshot.metrics is not None:
+                taken_at = snapshot.taken_at
+                if self._recent and _counters_reset(self._recent[-1][1], snapshot.metrics):
+                    self._recent.clear()
+                self._recent.append((taken_at, snapshot.metrics))
                 self._history.append(
-                    delta_point(self._prev_metrics, snapshot.metrics, snapshot.taken_at)
+                    delta_point(self._baseline(taken_at), snapshot.metrics, taken_at)
                 )
-                self._prev_metrics = snapshot.metrics
+
+    def _baseline(self, taken_at: float) -> MetricsSnapshot | None:
+        if len(self._recent) < 2:
+            return None
+        cutoff = taken_at - self._rate_window
+        return next(
+            (metrics for sampled_at, metrics in reversed(self._recent) if sampled_at <= cutoff),
+            self._recent[0][1],
+        )
 
     def state(self) -> dict[str, Any]:
         with self._lock:
@@ -161,6 +194,7 @@ class Sampler:
                 "version": __version__,
                 "target": self._target,
                 "interval_s": self._interval,
+                "rate_window_s": self._rate_window,
                 "updated_at": self._updated_at,
                 "server": props_to_dict(self._props),
                 "lifetime": rates_to_dict(self._metrics),

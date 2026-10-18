@@ -233,6 +233,7 @@ class TestServer(unittest.TestCase):
                 "port": 9999,
                 "interval": 2.0,
                 "history": 300,
+                "rate_window": 30.0,
                 "out": kwargs["out"],
             },
         )

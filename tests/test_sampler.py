@@ -141,6 +141,101 @@ class TestSampler(unittest.TestCase):
         self.assertEqual(len(history), 5)
         self.assertEqual(history[0]["t"], 3.0)
 
+    def _run_ticks(self, sampler, samples_at):
+        for taken_at in samples_at:
+            metrics = _metrics(samples_at[taken_at], taken_at)
+            sampler._fetch = lambda metrics=metrics, taken_at=taken_at: _snapshot(metrics, taken_at)
+            sampler.tick()
+        return sampler.state()["history"]
+
+    def test_recent_maxlen_derived_from_rate_window(self):
+        self.assertEqual(Sampler(lambda: None, target="t", interval=2.0)._recent.maxlen, 17)
+        self.assertEqual(
+            Sampler(lambda: None, target="t", interval=2.0, rate_window=1.0)._recent.maxlen, 4
+        )
+        self.assertEqual(
+            Sampler(lambda: None, target="t", interval=1.0, rate_window=4.0)._recent.maxlen, 6
+        )
+
+    def test_state_reports_rate_window(self):
+        sampler = Sampler(lambda: _snapshot(_metrics(PREVIOUS)), target="t", rate_window=12.5)
+
+        self.assertEqual(sampler.state()["rate_window_s"], 12.5)
+
+    def test_sparse_counter_jumps_stay_visible_inside_window(self):
+        sampler = Sampler(lambda: None, target="t", interval=2.0, rate_window=30.0)
+        samples_at = {}
+        for taken_at in range(0, 62, 2):
+            jumps = taken_at // 12
+            samples_at[float(taken_at)] = {
+                "tokens_predicted_total": 600.0 * jumps,
+                "tokens_predicted_seconds_total": 12.0 * jumps,
+            }
+
+        history = self._run_ticks(sampler, samples_at)
+
+        for point in history:
+            if point["t"] < 12:
+                self.assertIsNone(point["decode_tps"], point["t"])
+            else:
+                self.assertAlmostEqual(point["decode_tps"], 50.0, places=6, msg=point["t"])
+
+    def test_idle_counters_inside_window_are_none(self):
+        sampler = Sampler(lambda: None, target="t", interval=2.0, rate_window=30.0)
+        history = self._run_ticks(
+            sampler, {float(taken_at): PREVIOUS for taken_at in range(0, 62, 2)}
+        )
+
+        self.assertEqual(len(history), 31)
+        for point in history:
+            for key in POINT_KEYS[1:6]:
+                self.assertIsNone(point[key])
+
+    def test_baseline_is_newest_entry_at_or_before_window_start(self):
+        # decode_tps = (cur^2 - base^2) / (cur - base) = cur + base, so it reveals the baseline.
+        sampler = Sampler(lambda: None, target="t", interval=1.0, rate_window=4.0)
+        history = self._run_ticks(
+            sampler,
+            {
+                float(taken_at): {
+                    "tokens_predicted_total": float(taken_at * taken_at),
+                    "tokens_predicted_seconds_total": float(taken_at),
+                }
+                for taken_at in range(10)
+            },
+        )
+
+        bases = [point["decode_tps"] - point["t"] for point in history[1:]]
+        self.assertEqual(bases, [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+
+    def test_counter_reset_clears_window(self):
+        sampler = Sampler(lambda: None, target="t", interval=1.0, rate_window=30.0)
+        samples_at = {}
+        for taken_at in range(4):
+            samples_at[float(taken_at)] = {
+                "tokens_predicted_total": 100.0 * (taken_at + 1),
+                "tokens_predicted_seconds_total": float(taken_at + 1),
+            }
+        for taken_at in range(4, 7):
+            samples_at[float(taken_at)] = {
+                "tokens_predicted_total": 20.0 * (taken_at - 3),
+                "tokens_predicted_seconds_total": float(taken_at - 3),
+            }
+
+        history = self._run_ticks(sampler, samples_at)
+
+        self.assertEqual(len(sampler._recent), 3)
+        self.assertEqual([point["decode_tps"] for point in history[4:]], [None, 20.0, 20.0])
+
+    def test_single_sample_history_is_none(self):
+        sampler = Sampler(lambda: _snapshot(_metrics(CURRENT), 5.0), target="t", rate_window=30.0)
+        sampler.tick()
+
+        history = sampler.state()["history"]
+        self.assertEqual(len(history), 1)
+        for key in POINT_KEYS[1:6]:
+            self.assertIsNone(history[0][key])
+
     def test_state_keys_exact(self):
         sampler = Sampler(lambda: _snapshot(_metrics(PREVIOUS)), target="http://server")
         sampler.tick()
@@ -151,6 +246,7 @@ class TestSampler(unittest.TestCase):
                 "version",
                 "target",
                 "interval_s",
+                "rate_window_s",
                 "updated_at",
                 "server",
                 "lifetime",

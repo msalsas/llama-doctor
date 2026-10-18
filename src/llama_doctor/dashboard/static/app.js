@@ -72,6 +72,13 @@
     return element;
   }
 
+  function isolatedPointRadius(context) {
+    const data = context.dataset.data;
+    const at = (index) => index >= 0 && index < data.length ? data[index] : null;
+    const index = context.dataIndex;
+    return at(index) !== null && at(index - 1) === null && at(index + 1) === null ? 3 : 0;
+  }
+
   function lineChart(canvasId, datasets, percentScale) {
     return new Chart(byId(canvasId), {
       type: "line",
@@ -98,7 +105,7 @@
             grid: { color: colors.grid }, ticks: { color: colors.tick }
           }
         },
-        elements: { line: { borderWidth: 2, tension: 0 }, point: { radius: 0, hoverRadius: 4 } }
+        elements: { line: { borderWidth: 2, tension: 0 }, point: { radius: isolatedPointRadius, hoverRadius: 4 } }
       }
     });
   }
@@ -164,6 +171,14 @@
     renderTile("tile-prefill", "Prefill tok/s", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
     renderTile("tile-cache", "Prefix-cache hit", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
     renderTile("tile-kv", "KV usage", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent);
+  }
+
+  function updateRateWindow(state) {
+    const windowSeconds = number(state.rate_window_s);
+    const label = windowSeconds === null ? "" : `avg over ${Math.round(windowSeconds)} s`;
+    document.querySelectorAll(".rate-window").forEach((element) => {
+      element.textContent = label;
+    });
   }
 
   function updateHeader(state) {
@@ -298,6 +313,7 @@
     lastState = state;
     const history = historyOf(state);
     updateHeader(state);
+    updateRateWindow(state);
     updateTiles(state, history);
     updateCharts(history);
     updateTables(history);
