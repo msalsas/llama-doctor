@@ -59,6 +59,22 @@ class TestCatalog(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
 
+    def test_speculative_texts_cover_draft_model_and_mtp(self):
+        for metric_id in ("draft_length", "acceptance"):
+            with self.subTest(metric_id=metric_id):
+                text = " ".join(METRICS[metric_id].values())
+                self.assertIn("the speculative mechanism (separate draft model or MTP head)", text)
+                self.assertNotIn("the draft model", text.replace("separate draft model", ""))
+
+    def test_slots_explain_shared_context_budget(self):
+        text = METRICS["slots"]["interpretation"]
+        for phrase in ("same -c", "--parallel", "less context"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+    def test_prefill_explains_prefix_cache_effect(self):
+        self.assertIn("prefix-cache hit", METRICS["prefill_tps"]["interpretation"])
+
     def test_texts_are_model_agnostic(self):
         pattern = re.compile(r"\d+\s*GB|tok/s|\b\d+(-\d+)?B\b|\bQ\d\b|\d+\s*-\s*\d+")
         for metric_id, entry in METRICS.items():

@@ -21,7 +21,9 @@ METRICS: dict[str, dict[str, str]] = {
             "Higher means a shorter wait before the first token. Prefill is batched, so "
             "it normally runs several times faster than decode on the same server; when "
             "it is under twice decode, prompt processing is CPU-bound, typically because "
-            "layers or MoE experts run from system RAM."
+            "layers or MoE experts run from system RAM. A high prefix-cache hit makes it "
+            "read low, since only the short uncached tail of each prompt is evaluated, so "
+            "judge it against decode rather than as an absolute rate."
         ),
     },
     "prefix_cache_hit": {
@@ -46,7 +48,10 @@ METRICS: dict[str, dict[str, str]] = {
     },
     "draft_length": {
         "label": "Draft length",
-        "description": "Average number of tokens the draft model proposes per speculative step.",
+        "description": (
+            "Average number of tokens the speculative mechanism (separate draft model or MTP head) "
+            "proposes per speculative step."
+        ),
         "interpretation": (
             "Longer drafts only pay off while acceptance stays high; if acceptance drops "
             "as drafts grow, lower --draft-max."
@@ -57,8 +62,9 @@ METRICS: dict[str, dict[str, str]] = {
         "description": "Fraction of drafted tokens that the main model accepts.",
         "interpretation": (
             "Higher means speculative decoding saves more main-model steps; when it "
-            "falls, the draft model's cost eats the gain, so check that decode "
-            "throughput still beats running without a draft."
+            "falls, the cost of the speculative mechanism (separate draft model or MTP head) "
+            "eats the gain, so check that decode throughput still beats running without "
+            "drafts."
         ),
     },
     "queue_processing": {
@@ -103,7 +109,8 @@ METRICS: dict[str, dict[str, str]] = {
         "interpretation": (
             "Requests processing pinned at this count means new requests wait in the queue; "
             "each extra slot needs its own share of KV cache, so raise it only while KV "
-            "usage leaves room."
+            "usage leaves room. KV cache and context are shared out from the same -c, so "
+            "raising --parallel without raising -c leaves each slot with less context."
         ),
     },
     "context_used": {

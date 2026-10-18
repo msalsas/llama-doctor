@@ -27,10 +27,10 @@ Requires Python 3.10 or newer. There are no runtime dependencies; it uses the st
 ```sh
 git clone https://github.com/msalsas/llama-doctor.git
 cd llama-doctor
-pip install .
+pip install -e .
 ```
 
-To run it without installing anything:
+To run it without installing anything, from the repository root (the `PYTHONPATH=src` commands only resolve the package from there):
 
 ```sh
 PYTHONPATH=src python3 -m llama_doctor diagnose http://127.0.0.1:8080
@@ -57,9 +57,8 @@ rates (lifetime averages)
 findings
   WARN context.near_limit  Context is near its limit
         The observed peak of tokens in context is close to the configured context size.
-  INFO prefill.slow  Prefill is slow
-        Prefill throughput is below 300 tok/s.
   OK   connectivity.ok  Endpoints available
+  OK   prefill.ok  Prefill throughput is healthy
   OK   decode.ok  Decode throughput is healthy
   OK   prefix_cache.ok  Prefix cache is effective
   OK   kv.ok  KV cache usage is well below capacity
@@ -71,11 +70,12 @@ findings
         Wrapper builds such as unsloth-studio omit required fields.
 recommendations (by impact)
   1. medium Raise the context size or shorten prompts.  [-c]
-  2. medium Increase micro-batch size.  [--ubatch-size]
 overall: WARN (exit 1)
 ```
 
-Findings are sorted by severity, then by the impact of their recommendations. OK findings print without a detail line.
+Findings are sorted by severity, then by the impact of their recommendations. OK findings print without a detail line. Prefill here runs at 135 tok/s, under the 300 tok/s threshold, yet reports OK: 96.7 % of prompt tokens come from the prefix cache, so the lifetime rate only measures the short uncached tails, and it is still 5.5x decode. `prefill.slow` (WARN) fires only when the prefix-cache hit is under 50 % or unknown.
+
+Recommendations that name the same flag stay separate when their actions differ, so one finding asking to shrink `-c` and another asking to raise it both show up.
 
 Exit codes: `0` = OK, `1` = WARN, `2` = CRIT (including server unreachable), `3` = invalid usage or arguments.
 
@@ -131,17 +131,20 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--interval` | Seconds between polls (default `2.0`). |
 | `--history` | Number of points kept for the charts (default `300`). |
 | `--rate-window SEC` | Seconds over which chart rates and the queue check are computed (default `30.0`). |
+| `--vram-gib N` | GPU memory available, same as in `diagnose`; without it the memory check stays N/A on the dashboard. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.
 
 ## Checks
 
-The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache usage and context oversizing, context window, request queue, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
+The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache usage, context window (near the limit or oversized), request queue, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
+
+![Findings panel](docs/assets/findings.png)
 
 Two findings that the server above does not trigger but other setups do:
 
 - `prefix_cache.low_hit_ratio` (WARN below 20 %): for example, only 10.3 % of prompt tokens came from the cache. The fix is to keep the prompt prefix byte-identical across requests and enable `--cache-reuse`.
-- `kv.context_oversized` (WARN when the peak is under 25 % of a context of 16384 tokens or more): for example, the server reserves a 32768-token context but the peak is 5.5k tokens. The suggested size is twice the peak rounded up to a multiple of 4096, so `-c 12288` frees KV cache memory.
+- `context.oversized` (WARN when the peak is under 25 % of a context of 16384 tokens or more): for example, the server reserves a 32768-token context but the peak is 5.5k tokens. The suggested size is twice the peak rounded up to a multiple of 4096, so `-c 12288` frees KV cache memory.
 
 ## Development
 

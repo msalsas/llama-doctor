@@ -54,8 +54,9 @@ class Report:
     def by_code(self, code: str) -> Finding | None
 ```
 `recommendations()` flattens recs in finding order and sorts stably by
-impact desc. It then dedupes on `flag`, or on `action` when `flag` is None,
-keeping the first occurrence.
+impact desc. It then dedupes on the `(action, flag)` pair, keeping the first
+occurrence; same-flag recommendations with different actions all survive,
+since two findings may push one flag in opposite directions.
 
 ## engine.py
 
@@ -67,8 +68,12 @@ never put the exception message in it. Sort by
 `BUILTIN_ANALYZERS` in this order: connectivity, prefill, decode,
 prefix_cache, kv, context, queue, spec, memory, props. `context` gives WARN
 `context.near_limit` when `n_tokens_max / n_ctx >= 0.9` (evidence `used_ratio`,
-`n_tokens_max`, `n_ctx`), OK `context.ok` below that, and
-`context.insufficient_data` without both values. It also exports `diagnose(ctx,
+`n_tokens_max`, `n_ctx`). With `n_ctx >= 16384` and `n_tokens_max / n_ctx < 0.25`
+it gives WARN `context.oversized` with the same evidence plus `suggested_ctx =
+max(4096, ceil(2*n_tokens_max/4096)*4096)`; its rec, flag `-c`, names the
+suggested value, impact HIGH when cpu-bound is True and MEDIUM otherwise.
+Otherwise OK `context.ok`, and `context.insufficient_data` without both values
+(non-finite values are not evaluable). It also exports `diagnose(ctx,
 analyzers=BUILTIN_ANALYZERS) -> Report`.
 
 ## signals.py
@@ -99,14 +104,20 @@ and so is the order within a list.
 - **prefill**: if there is no rate, INSUFFICIENT `prefill.insufficient_data`
   (evidence `prompt_tokens_total`; detail suggests `--probe`). If cpu-bound
   and `props.is_moe is True`, CRITICAL `prefill.moe_cpu_experts` with recs in
-  this order: HIGH None (smaller quant); HIGH `--ple-on-cpu` (N-gram/PLE
-  tables to CPU/mmap, on models that ship them); MEDIUM `--draft-max` (MTP or
-  speculative drafting at 2); LOW `-c` (smaller context frees VRAM for
-  experts). If cpu-bound otherwise, WARN `prefill.cpu_bound` with recs HIGH
-  `-ngl`, HIGH None (smaller quant), LOW `-c`. If prefill < 300 (`SLOW_PREFILL_TPS`),
-  INFO `prefill.slow` with rec MEDIUM `--ubatch-size`. Otherwise OK
-  `prefill.ok`. Evidence on all rate paths: `prefill_tps`, `decode_tps` (or
-  None), `source`.
+  this order: HIGH None (smaller quant); HIGH `--ple-on-cpu` (conditional:
+  "If the loaded model uses PLE/N-gram tables, ..." to CPU/mmap); MEDIUM
+  `--draft-max` (MTP or speculative drafting at 2); LOW `-c` (smaller context
+  frees VRAM for experts). If cpu-bound otherwise, WARN `prefill.cpu_bound`
+  with recs HIGH `-ngl`, HIGH None (smaller quant), LOW `-c`. If prefill < 300
+  (`SLOW_PREFILL_TPS`), add evidence `cache_hit_ratio` (lifetime
+  `metrics.cache_hit_ratio`; None for a probe rate, since the probe disables the
+  prefix cache). With `cache_hit_ratio >= 0.5` (`HIGH_CACHE_HIT_RATIO`) it is OK
+  `prefill.ok`: cached tokens skip prefill, so the lifetime rate only covers
+  short uncached tails and reads low. Otherwise WARN `prefill.slow` with no
+  recs (`prefill.moe_cpu_experts` covers the real cause). Both details cite the
+  300 tok/s threshold and the prefill/decode ratio against the 2x CPU-bound
+  line. At or above 300, OK `prefill.ok`. Evidence on all rate paths:
+  `prefill_tps`, `decode_tps` (or None), `source`.
 - **decode**: if there is no rate, INSUFFICIENT `decode.insufficient_data`.
   If decode < 10.0 (`SLOW_DECODE_TPS`), WARN `decode.slow`. When cpu-bound is
   True, it gets no recs and the detail points to the prefill finding as the
@@ -121,14 +132,9 @@ and so is the order within a list.
   `hit_ratio`.
 - **kv**: if metrics is None, INSUFFICIENT `kv.insufficient_data`. Rule A:
   `kv_cache_usage_ratio >= 0.9` gives WARN `kv.saturated` (rec MEDIUM
-  `--parallel`); queued requests alone are `queue.deferred`, not KV. Rule B needs `n_tokens_max` and
-  `props.n_ctx`, with `n_ctx >= 16384` and `n_tokens_max / n_ctx < 0.25`. It
-  gives WARN `kv.context_oversized` with evidence `peak_ratio`, `n_ctx`,
-  `n_tokens_max`, and `suggested_ctx = max(4096, ceil(2*n_tokens_max/4096)*4096)`.
-  Non-finite context or peak-token values are not evaluable.
-  Its rec, flag `-c`, names the suggested value; impact is HIGH when
-  cpu-bound is True and MEDIUM otherwise. With no findings, return OK
-  `kv.ok` ("KV cache usage is well below capacity") only when
+  `--parallel`); queued requests alone are `queue.deferred`, not KV. kv reads
+  only `kv_cache_usage_ratio`; context oversizing is `context.oversized`.
+  Otherwise, return OK `kv.ok` ("KV cache usage is well below capacity") only when
   `0 <= kv_cache_usage_ratio < 0.9`, else INSUFFICIENT `kv.insufficient_data`
   (ratio missing or NaN). `kv.ok` speaks only of the KV usage gauge; window
   sizing against the observed peak belongs to `context`, so `kv.ok` never
@@ -139,7 +145,9 @@ and so is the order within a list.
   value when the window is empty (one-shot diagnose). Missing metrics or gauge
   gives INSUFFICIENT `queue.insufficient_data`; `deferred_peak > 0` gives INFO
   `queue.deferred` with evidence `deferred_peak`, `requests_deferred`,
-  `requests_processing`, plus `window_s` when windowed; otherwise OK `queue.ok`.
+  `requests_processing`, plus `window_s` when windowed, and recs MEDIUM None
+  (reduce client concurrency) and MEDIUM `--parallel` (more slots, raising `-c`
+  too because it divides across slots); otherwise OK `queue.ok`.
 - **spec**: if draft_tokens_total or drafts_total is None, INSUFFICIENT
   `spec.insufficient_data`. If drafts_total == 0, INFO `spec.inactive`. If
   acceptance is None, INSUFFICIENT. Then the first matching rule wins:
@@ -220,11 +228,12 @@ with impacts `[HIGH, HIGH, MEDIUM, LOW]`); `test_prefill_cpu_bound_dense`
 `PropsSnapshot.from_payload({"model_path": "Llama-3.1-8B-Q4_K_M.gguf"})`
 gives WARN `prefill.cpu_bound`); `test_prefill_ok_healthy`
 (2000.0); `test_prefill_insufficient_minimal`; `test_prefill_slow` (probe
-250 / 20); `test_decode_slow_is_symptom` (MOE gives WARN, 7.0, recs ());
+250 / 20 gives WARN, no recs); `test_prefill_below_threshold_with_high_cache_hit_is_ok`
+(lifetime 135 tok/s with 96.7 % hits gives OK); `test_decode_slow_is_symptom` (MOE gives WARN, 7.0, recs ());
 `test_decode_ok_minimal` (30.0, OK); `test_prefix_cache_low_moe` (WARN,
 hit_ratio 0.1111111); `test_prefix_cache_ok_healthy` (0.75);
-`test_prefix_cache_insufficient_minimal`; `test_kv_context_oversized_moe`
-(WARN, peak_ratio 0.1875, suggested_ctx 12288, rec impact HIGH);
+`test_prefix_cache_insufficient_minimal`; `test_context_oversized_moe`
+(WARN, used_ratio 0.1875, suggested_ctx 12288, rec impact HIGH);
 `test_kv_ok_healthy` (title "KV cache usage is well below capacity");
 `test_kv_without_usage_ratio_is_insufficient`; `test_kv_non_finite_usage_ratio_is_insufficient`;
 `test_kv_just_below_saturation_is_ok` (0.89); `test_kv_saturated_does_not_emit_ok` (0.9);
@@ -245,9 +254,11 @@ test_engine: `test_moe_report_overall_critical_exit_2`;
 `test_healthy_report_exit_0` (no WARN/CRITICAL; overall INFO);
 `test_minimal_report_exit_0`; `test_findings_sorted` (custom MOE WARN
 findings are ordered by maximum recommendation impact, not registration
-order); `test_recommendations_deduped_by_flag` (unflagged recommendations
-dedupe by action; same-flag recommendations retain the first, highest-impact
-occurrence; retained recommendations are impact-descending across findings);
+order); `test_recommendations_deduped_by_action_and_flag` (identical
+action and flag dedupe to the first, highest-impact occurrence; retained
+recommendations are impact-descending across findings);
+`test_opposite_recommendations_for_the_same_flag_both_survive` (shrink `-c`
+and raise `-c` both stay);
 `test_analyzer_exception_isolated` (a spec whose func raises
 `ValueError("SENTINEL")` gives `<id>.error` INSUFFICIENT, detail `ValueError`,
 no SENTINEL); `test_custom_registry` (a one-analyzer tuple gives only its

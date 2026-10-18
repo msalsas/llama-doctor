@@ -109,10 +109,11 @@ class Report:
             (recommendation for finding in self.findings for recommendation in finding.recommendations),
             key=lambda recommendation: -recommendation.impact,
         )
+        # Same flag with a different action stays: two findings may push it in opposite directions.
         unique: list[Recommendation] = []
-        seen: set[str] = set()
+        seen: set[tuple[str, str | None]] = set()
         for recommendation in ordered:
-            key = recommendation.flag if recommendation.flag is not None else recommendation.action
+            key = (recommendation.action, recommendation.flag)
             if key not in seen:
                 seen.add(key)
                 unique.append(recommendation)

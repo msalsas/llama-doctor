@@ -122,6 +122,20 @@ class TestSampler(unittest.TestCase):
         codes = [finding["code"] for finding in state["report"]["findings"]]
         self.assertIn("context.near_limit", codes)
 
+    def test_hints_reach_memory_analyzer(self):
+        from llama_doctor.analysis.base import HostHints
+        from llama_doctor.models import ModelsMeta
+
+        models = ModelsMeta.from_payload(json.loads(load_fixture("models_full.json")))
+
+        def codes(**kwargs):
+            sampler = Sampler(lambda: ServerSnapshot(1.0, None, None, models, {}), target="t", **kwargs)
+            sampler.tick()
+            return [finding["code"] for finding in sampler.state()["report"]["findings"]]
+
+        self.assertIn("memory.insufficient_data", codes())
+        self.assertIn("memory.fits_vram", codes(hints=HostHints(vram_gib=24)))
+
     def test_delta_point_queue_gauges_are_current_values(self):
         point = delta_point(
             _metrics({"requests_processing": 1, "requests_deferred": 3}),

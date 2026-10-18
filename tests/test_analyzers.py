@@ -71,11 +71,47 @@ class TestAnalyzers(unittest.TestCase):
         self.assert_finding(finding, "prefill.insufficient_data", Severity.INSUFFICIENT_DATA,
                             {"prompt_tokens_total": 600.0})
 
+    def test_prefill_moe_ple_recommendation_is_conditional(self):
+        finding = findings(make_context(), "prefill")[0]
+        ple = next(item for item in finding.recommendations if item.flag == "--ple-on-cpu")
+        self.assertTrue(ple.action.startswith("If the loaded model uses PLE/N-gram tables"))
+
     def test_prefill_slow(self):
         finding = findings(replace(make_context(), probe=ProbeResult(250, 20, 1200, 4, 0)), "prefill")[0]
-        self.assert_finding(finding, "prefill.slow", Severity.INFO,
-                            {"prefill_tps": 250, "decode_tps": 20, "source": "probe"})
-        self.assertEqual((finding.recommendations[0].impact, finding.recommendations[0].flag), (2, "--ubatch-size"))
+        self.assert_finding(finding, "prefill.slow", Severity.WARN,
+                            {"prefill_tps": 250, "decode_tps": 20, "source": "probe", "cache_hit_ratio": None})
+        self.assertEqual(finding.recommendations, ())
+        for phrase in ("300 tok/s", "decode", "12.5x"):
+            self.assertIn(phrase, finding.detail)
+
+    def _lifetime_prefill(self, prompt_tps, cached_total):
+        context = make_context("metrics_healthy.txt")
+        metrics = replace(context.metrics, prompt_tokens_total=10000, prompt_seconds_total=10000 / prompt_tps,
+                          tokens_predicted_total=2000, tokens_predicted_seconds_total=100,
+                          prompt_tokens_cached_total=cached_total)
+        return replace(context, snapshot=replace(context.snapshot, metrics=metrics))
+
+    def test_prefill_slow_with_low_cache_hit_warns(self):
+        finding = findings(self._lifetime_prefill(135.0, 10000 * 0.49 / 0.51), "prefill")[0]
+        self.assertEqual((finding.code, finding.severity), ("prefill.slow", Severity.WARN))
+        self.assertAlmostEqual(finding.evidence["cache_hit_ratio"], 0.49, places=6)
+
+    def test_prefill_slow_without_cache_hit_data_warns(self):
+        finding = findings(self._lifetime_prefill(135.0, None), "prefill")[0]
+        self.assertEqual((finding.code, finding.severity), ("prefill.slow", Severity.WARN))
+        self.assertIsNone(finding.evidence["cache_hit_ratio"])
+
+    def test_prefill_below_threshold_with_high_cache_hit_is_ok(self):
+        finding = findings(self._lifetime_prefill(135.0, 290000), "prefill")[0]
+        self.assertEqual((finding.code, finding.severity), ("prefill.ok", Severity.OK))
+        self.assertAlmostEqual(finding.evidence["cache_hit_ratio"], 0.966666, places=5)
+        self.assertEqual(finding.recommendations, ())
+        for phrase in ("300 tok/s", "prefix cache", "decode", "6.8x"):
+            self.assertIn(phrase, finding.detail)
+
+    def test_prefill_probe_ignores_cache_hit(self):
+        context = replace(self._lifetime_prefill(135.0, 290000), probe=ProbeResult(250, 20, 1200, 4, 0))
+        self.assertEqual(findings(context, "prefill")[0].code, "prefill.slow")
 
     def test_decode_slow_is_symptom(self):
         finding = findings(make_context(), "decode")[0]
@@ -109,12 +145,20 @@ class TestAnalyzers(unittest.TestCase):
         finding = findings(make_context("metrics_minimal.txt", "props_unsloth_minimal.json", None), "prefix_cache")[0]
         self.assert_finding(finding, "prefix_cache.insufficient_data", Severity.INSUFFICIENT_DATA, {})
 
-    def test_kv_context_oversized_moe(self):
-        finding = findings(make_context(), "kv")[0]
-        self.assertEqual((finding.code, finding.severity), ("kv.context_oversized", Severity.WARN))
-        self.assertAlmostEqual(finding.evidence["peak_ratio"], 0.1875, places=6)
+    def test_context_oversized_moe(self):
+        finding = findings(make_context(), "context")[0]
+        self.assertEqual((finding.code, finding.severity), ("context.oversized", Severity.WARN))
+        self.assertAlmostEqual(finding.evidence["used_ratio"], 0.1875, places=6)
         self.assertEqual((finding.evidence["suggested_ctx"], finding.recommendations[0].impact,
                           finding.recommendations[0].flag), (12288, 3, "-c"))
+
+    def test_context_oversized_needs_large_window(self):
+        self.assertEqual(findings(self._context_at(2000, n_ctx=16383), "context")[0].code, "context.ok")
+        self.assertEqual(findings(self._context_at(4095, n_ctx=16384), "context")[0].code, "context.oversized")
+        self.assertEqual(findings(self._context_at(4096, n_ctx=16384), "context")[0].code, "context.ok")
+
+    def test_kv_only_reports_usage_ratio(self):
+        self.assertEqual([item.code for item in findings(make_context(), "kv")], ["kv.insufficient_data"])
 
     def test_kv_ok_healthy(self):
         finding = findings(make_context("metrics_healthy.txt"), "kv")[0]
@@ -249,6 +293,8 @@ class TestAnalyzers(unittest.TestCase):
         self.assert_finding(finding, "queue.deferred", Severity.INFO,
                             {"deferred_peak": 3.0, "requests_deferred": 3.0, "requests_processing": 1.0})
         self.assertEqual(finding.title, "Requests are queued; all slots busy")
+        self.assertEqual([item.flag for item in finding.recommendations], [None, "--parallel"])
+        self.assertIn("divides", finding.recommendations[1].rationale)
         self.assert_finding(findings(make_context("queue_burst/3_after.txt"), "queue")[0],
                             "queue.ok", Severity.OK, {"deferred_peak": 0.0})
 

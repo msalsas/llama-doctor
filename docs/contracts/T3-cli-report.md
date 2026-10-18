@@ -107,10 +107,12 @@ def main(argv: Sequence[str] | None = None) -> int
 - `diagnose URL [--json] [--api-key-env VAR] [--timeout SEC (5.0)] [--probe]
   [--vram-gib N] [--ram-gib N] [--no-color]`
 - `serve URL [--host 127.0.0.1] [--port 8765] [--interval 2.0] [--history 300]
-  [--rate-window SEC (30.0, must be > 0)] [--api-key-env VAR] [--timeout SEC]`.
+  [--rate-window SEC (30.0, must be > 0)] [--api-key-env VAR] [--timeout SEC]
+  [--vram-gib N]`.
   Its handler builds the client and calls
   `llama_doctor.dashboard.server.run(client, host=..., port=..., interval=...,
-  history=..., rate_window=..., out=sys.stderr) -> int`, imported inside the
+  history=..., rate_window=..., hints=HostHints(vram_gib=...), out=sys.stderr)
+  -> int`, imported inside the
   handler. T4 implements `run`; this task only wires the parser and the
   lazy call.
 - There is no flag that takes a key value directly. `--api-key-env VAR`
@@ -160,7 +162,7 @@ test_cli (FakeLlamaServer with fixture routes; capture output with
 `test_diagnose_moe_exit_2`; `test_diagnose_healthy_exit_0` (healthy metrics,
 props_full, models_full); `test_diagnose_exit_1_on_warn` (healthy metrics,
 `/props` = `{"default_generation_settings": {"n_ctx": 65536}, "model_path":
-"m-Q8_0.gguf"}` gives `kv.context_oversized`, exit 1); `test_json_output`
+"m-Q8_0.gguf"}` gives `context.oversized`, exit 1); `test_json_output`
 (parses; `exit_code == 2`, `rates.prefill_tps == 40.0`, `server.quant ==
 "UD-Q4_K_XL"`, no `SENTINEL` anywhere in stdout); `test_unreachable_exit_2`
 (closed port; `connectivity.unreachable` in output); `test_api_key_from_env`
