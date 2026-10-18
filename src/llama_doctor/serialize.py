@@ -32,10 +32,20 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def display_number(value: Any) -> Any:
+    """Round a float for display: 1 decimal, or 3 below 1 so ratios stay readable."""
+    if not isinstance(value, float):
+        return value
+    if not math.isfinite(value):
+        return None
+    return round(value, 1 if abs(value) >= 1 else 3)
+
+
 def finding_to_dict(finding: Finding) -> dict[str, Any]:
+    evidence = {key: display_number(value) for key, value in finding.evidence.items()}
     return {"analyzer": finding.analyzer_id, "code": finding.code,
             "severity": severity_name(finding.severity), "title": finding.title,
-            "detail": finding.detail, "evidence": _json_safe(finding.evidence),
+            "detail": finding.detail, "evidence": evidence,
             "recommendations": [recommendation_to_dict(item) for item in finding.recommendations]}
 
 

@@ -105,6 +105,13 @@ class TestStaticFiles(unittest.TestCase):
             with self.subTest(caption=caption):
                 self.assertIn(f'"{caption}"', self.app_js)
 
+    def test_axis_titles_break_before_unit(self):
+        self.assertIn("text: caption.split(/ (?=\\()/)", self.app_js)
+
+    def test_kv_tile_says_not_exported_without_lifetime_line(self):
+        self.assertIn('"not exported"', self.app_js)
+        self.assertIn("notes.kv_unexported === true", self.app_js)
+
     def test_metric_notes_start_hidden_and_are_styled(self):
         for note in ("note-decode", "note-prefill", "note-kv", "note-cache-hit"):
             with self.subTest(note=note):

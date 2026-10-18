@@ -103,7 +103,8 @@
           y: {
             beginAtZero: true, max: percentScale ? 100 : undefined,
             grid: { color: colors.grid }, ticks: { color: colors.tick },
-            title: { display: true, text: caption, color: colors.legend }
+            // The rotated title must fit the plot height, so the unit goes on its own line.
+            title: { display: true, text: caption.split(/ (?=\()/), color: colors.legend }
           }
         },
         elements: { line: { borderWidth: 2, tension: 0 }, point: { radius: isolatedPointRadius, hoverRadius: 4 } }
@@ -157,10 +158,14 @@
     return null;
   }
 
-  function renderTile(id, label, live, lifetime, formatter) {
+  function renderTile(id, label, live, lifetime, formatter, unexported = false) {
     const tile = byId(id);
     tile.replaceChildren();
     append(tile, "div", label, "tile-label");
+    if (unexported) {
+      append(tile, "div", "not exported", "hero");
+      return;
+    }
     const hero = live === null ? lifetime : live;
     append(tile, "div", formatter(hero), "hero");
     append(tile, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
@@ -168,10 +173,12 @@
 
   function updateTiles(state, history) {
     const lifetime = state.lifetime && typeof state.lifetime === "object" ? state.lifetime : {};
+    const notes = state.notes && typeof state.notes === "object" ? state.notes : {};
     renderTile("tile-decode", "Decode tok/s", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
     renderTile("tile-prefill", "Prefill tok/s", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
     renderTile("tile-cache", "Prefix-cache hit", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
-    renderTile("tile-kv", "KV usage", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent);
+    renderTile("tile-kv", "KV usage", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent,
+      notes.kv_unexported === true);
   }
 
   // The sampler decides which notes apply; the note text lives in index.html.
