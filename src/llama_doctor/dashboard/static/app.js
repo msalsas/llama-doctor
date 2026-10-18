@@ -209,13 +209,11 @@
   // KV usage is an instantaneous gauge with no lifetime average, so it gets no lifetime line.
   function renderKvTile(history, unexported, kv) {
     const body = tileValue("tile-kv");
-    if (unexported && kv && kv.estimated === true && number(kv.usage_ratio) !== null) {
-      append(body, "div", `~${percent(number(kv.usage_ratio))}`, "hero");
-      append(body, "div", "estimated from /slots", "secondary");
-      return;
-    }
     if (unexported) {
       append(body, "div", "not exported", "hero");
+      if (kv && kv.estimated === true && number(kv.usage_ratio) !== null) {
+        append(body, "div", `~${percent(number(kv.usage_ratio))} estimated - see Context`, "secondary");
+      }
       return;
     }
     append(body, "div", percent(latest(history, "kv_usage_ratio")), "hero");

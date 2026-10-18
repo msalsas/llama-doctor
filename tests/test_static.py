@@ -120,6 +120,13 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn('"not exported"', self.app_js)
         self.assertIn("notes.kv_unexported === true", self.app_js)
 
+    def test_kv_tile_estimate_is_secondary_and_refers_to_context(self):
+        self.assertIn("estimated - see Context", self.app_js)
+        start = self.app_js.index("function renderKvTile")
+        body = self.app_js[start:self.app_js.index("function renderQueueTile")]
+        self.assertLess(body.index('"not exported", "hero"'), body.index("estimated - see Context"))
+        self.assertNotIn("`~${percent(number(kv.usage_ratio))}`", body)
+
     def test_kv_tile_is_a_gauge_without_lifetime_average(self):
         self.assertIn('percent(latest(history, "kv_usage_ratio"))', self.app_js)
         self.assertNotIn("lifetime.kv_usage_ratio", self.app_js)
