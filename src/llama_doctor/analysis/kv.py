@@ -13,7 +13,8 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
         return [Finding("kv", "kv.insufficient_data", Severity.INSUFFICIENT_DATA,
                         "KV cache data unavailable", "The metrics endpoint is unavailable.")]
     findings: list[Finding] = []
-    if metrics.kv_cache_usage_ratio is not None and metrics.kv_cache_usage_ratio >= SATURATED_RATIO:
+    usage = metrics.kv_cache_usage_ratio
+    if usage is not None and usage >= SATURATED_RATIO:
         findings.append(Finding("kv", "kv.saturated", Severity.WARN, "KV cache is saturated",
                                 f"KV cache usage is at or above {SATURATED_RATIO * 100:.0f} % of capacity, "
                                 "constraining requests.",
@@ -40,8 +41,8 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
                                                 "A smaller context frees memory.", impact, "-c"),)))
     if findings:
         return findings
-    if evaluable:
-        return [Finding("kv", "kv.ok", Severity.OK, "KV cache sizing is healthy",
-                        "Context sizing is consistent with observed peak use.")]
+    if usage is not None and 0 <= usage < SATURATED_RATIO:
+        return [Finding("kv", "kv.ok", Severity.OK, "KV cache usage is well below capacity",
+                        f"KV cache usage is under {SATURATED_RATIO * 100:.0f} % of capacity.")]
     return [Finding("kv", "kv.insufficient_data", Severity.INSUFFICIENT_DATA,
-                    "KV cache data unavailable", "Context size or peak token metrics are unavailable.")]
+                    "KV cache data unavailable", "The KV cache usage metric is not exported.")]

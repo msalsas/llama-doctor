@@ -128,7 +128,11 @@ and so is the order within a list.
   Non-finite context or peak-token values are not evaluable.
   Its rec, flag `-c`, names the suggested value; impact is HIGH when
   cpu-bound is True and MEDIUM otherwise. With no findings, return OK
-  `kv.ok` if rule B was evaluable, else INSUFFICIENT `kv.insufficient_data`.
+  `kv.ok` ("KV cache usage is well below capacity") only when
+  `0 <= kv_cache_usage_ratio < 0.9`, else INSUFFICIENT `kv.insufficient_data`
+  (ratio missing or NaN). `kv.ok` speaks only of the KV usage gauge; window
+  sizing against the observed peak belongs to `context`, so `kv.ok` never
+  sits beside `context.near_limit` because of `n_ctx` / `n_tokens_max`.
 - **queue**: `requests_processing` and `requests_deferred` are instantaneous
   gauges, never deltas. `deferred_peak` is the max of `requests_deferred` over
   `ctx.window` (dashboard rate window, current sample last), or the current
@@ -221,7 +225,10 @@ gives WARN `prefill.cpu_bound`); `test_prefill_ok_healthy`
 hit_ratio 0.1111111); `test_prefix_cache_ok_healthy` (0.75);
 `test_prefix_cache_insufficient_minimal`; `test_kv_context_oversized_moe`
 (WARN, peak_ratio 0.1875, suggested_ctx 12288, rec impact HIGH);
-`test_kv_ok_healthy`; `test_kv_insufficient_minimal`; `test_kv_saturated`
+`test_kv_ok_healthy` (title "KV cache usage is well below capacity");
+`test_kv_without_usage_ratio_is_insufficient`; `test_kv_non_finite_usage_ratio_is_insufficient`;
+`test_kv_just_below_saturation_is_ok` (0.89); `test_kv_saturated_does_not_emit_ok` (0.9);
+`test_kv_insufficient_minimal`; `test_kv_saturated`
 (samples with `requests_deferred 3`); `test_spec_drafts_too_long_offloaded_moe`
 (avg 3.0, acceptance 0.4); `test_spec_raise_draft_healthy` (INFO, 2.0, 0.8);
 `test_spec_low_acceptance` (accepted 2000 of 9000); `test_spec_insufficient_minimal`;
@@ -244,7 +251,12 @@ occurrence; retained recommendations are impact-descending across findings);
 `test_analyzer_exception_isolated` (a spec whose func raises
 `ValueError("SENTINEL")` gives `<id>.error` INSUFFICIENT, detail `ValueError`,
 no SENTINEL); `test_custom_registry` (a one-analyzer tuple gives only its
-findings).
+findings); `test_kv_ok_never_coexists_with_context_near_limit_when_kv_ratio_high_or_missing`
+(n_ctx 80128, n_tokens_max 78501, KV ratio None, NaN, inf and 0.9 to 1.0 give
+`context.near_limit` and no `kv.ok`);
+`test_kv_ok_beside_context_near_limit_only_speaks_of_the_kv_gauge` (same
+context with KV ratio 0.0 to 0.89: `kv.ok` text names neither sizing,
+context nor peak).
 
 test_serialize: `test_report_json_roundtrip` (`json.dumps(report_to_dict(r),
 allow_nan=False)` succeeds for the MOE, HEALTHY, and MINIMAL reports);

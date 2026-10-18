@@ -117,7 +117,29 @@ class TestAnalyzers(unittest.TestCase):
                           finding.recommendations[0].flag), (12288, 3, "-c"))
 
     def test_kv_ok_healthy(self):
-        self.assert_finding(findings(make_context("metrics_healthy.txt"), "kv")[0], "kv.ok", Severity.OK, {})
+        finding = findings(make_context("metrics_healthy.txt"), "kv")[0]
+        self.assert_finding(finding, "kv.ok", Severity.OK, {})
+        self.assertEqual(finding.title, "KV cache usage is well below capacity")
+        self.assertNotIn("sizing", f"{finding.title} {finding.detail}".lower())
+
+    def _kv_context(self, kv_ratio):
+        context = make_context("metrics_healthy.txt")
+        return replace(context, snapshot=replace(context.snapshot,
+                       metrics=replace(context.metrics, kv_cache_usage_ratio=kv_ratio)))
+
+    def test_kv_without_usage_ratio_is_insufficient(self):
+        self.assert_finding(findings(self._kv_context(None), "kv")[0],
+                            "kv.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+
+    def test_kv_non_finite_usage_ratio_is_insufficient(self):
+        self.assert_finding(findings(self._kv_context(math.nan), "kv")[0],
+                            "kv.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+
+    def test_kv_just_below_saturation_is_ok(self):
+        self.assertEqual([item.code for item in findings(self._kv_context(0.89), "kv")], ["kv.ok"])
+
+    def test_kv_saturated_does_not_emit_ok(self):
+        self.assertEqual([item.code for item in findings(self._kv_context(0.9), "kv")], ["kv.saturated"])
 
     def test_kv_insufficient_minimal(self):
         self.assert_finding(findings(make_context("metrics_minimal.txt", "props_unsloth_minimal.json", None), "kv")[0],

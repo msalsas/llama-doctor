@@ -1,4 +1,6 @@
+import math
 import unittest
+from dataclasses import replace
 
 from llama_doctor.analysis import BUILTIN_ANALYZERS, diagnose
 from llama_doctor.analysis.base import AnalyzerSpec, Finding, Impact, Recommendation, Severity
@@ -86,6 +88,29 @@ class TestEngine(unittest.TestCase):
         finding = report.by_code("none.error")
         self.assertEqual((finding.analyzer_id, finding.title, finding.detail),
                          ("none", "None: analyzer failed", "TypeError"))
+
+    def _near_limit_context(self, kv_ratio):
+        context = make_context("metrics_context_near_limit.txt", "props_context_80k.json")
+        return replace(context, snapshot=replace(context.snapshot,
+                       metrics=replace(context.metrics, kv_cache_usage_ratio=kv_ratio)))
+
+    def test_kv_ok_never_coexists_with_context_near_limit_when_kv_ratio_high_or_missing(self):
+        for kv_ratio in (None, math.nan, math.inf, 0.9, 0.91, 0.95, 0.98, 0.99, 1.0):
+            with self.subTest(kv_ratio=kv_ratio):
+                report = diagnose(self._near_limit_context(kv_ratio))
+                self.assertIsNotNone(report.by_code("context.near_limit"))
+                self.assertIsNone(report.by_code("kv.ok"))
+
+    def test_kv_ok_beside_context_near_limit_only_speaks_of_the_kv_gauge(self):
+        for kv_ratio in (0.0, 0.1, 0.42, 0.5, 0.75, 0.89):
+            with self.subTest(kv_ratio=kv_ratio):
+                report = diagnose(self._near_limit_context(kv_ratio))
+                self.assertIsNotNone(report.by_code("context.near_limit"))
+                kv_ok = report.by_code("kv.ok")
+                self.assertIsNotNone(kv_ok)
+                text = f"{kv_ok.title} {kv_ok.detail}".lower()
+                for word in ("sizing", "context", "peak"):
+                    self.assertNotIn(word, text)
 
     def test_custom_registry(self):
         registry = (BUILTIN_ANALYZERS[0],)
