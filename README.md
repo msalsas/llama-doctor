@@ -13,7 +13,7 @@ The live dashboard on an RTX 5080 rig running Unsloth Studio, serving Qwen3.8-Fl
 ## What it does
 
 - Reads `/metrics`, `/props` and `/v1/models` over HTTP. It never attaches to, restarts or reconfigures the server process.
-- Runs 10 analyzers that emit 41 distinct findings across connectivity, prefill and decode throughput, memory, cache, context sizing, request queueing, speculative decoding, quantization and expert offload.
+- Runs 10 analyzers that emit 42 distinct findings across connectivity, prefill and decode throughput, memory, cache, context sizing, request queueing, speculative decoding, quantization and expert offload.
 - Ranks recommendations by impact and names the server flag to change.
 - Returns an exit code per severity, so you can gate CI jobs or cron checks on it.
 - Optionally serves a local dashboard with live charts and findings.
@@ -58,22 +58,23 @@ findings
   WARN context.near_limit  Context is near its limit
         The observed peak of tokens in context is close to the configured context size.
   OK   connectivity.ok  Endpoints available
-  OK   prefill.ok  Prefill throughput is healthy
   OK   decode.ok  Decode throughput is healthy
   OK   prefix_cache.ok  Prefix cache is effective
-  OK   kv.ok  KV cache usage is well below capacity
   OK   queue.ok  No requests queued
   OK   spec.ok  Speculative decoding is healthy
+  OK   props.ok  Properties raise no issue
+  N/A  prefill.insufficient_data  Prefill rate cannot be judged
+        Prefill measures 135 tok/s, under 300 tok/s, but 97 % of prompt tokens come from the prefix cache, so the lifetime rate mixes short uncached tails with any large uncached prompt and cannot tell them apart. Run --probe for a cache-free measurement, or watch it under serve, whose window shows the uncached tokens per request.
+  N/A  kv.insufficient_data  KV cache data unavailable
+        The KV cache usage metric is not exported.
   N/A  memory.insufficient_data  Memory estimate unavailable
         Provide --vram-gib and optionally --ram-gib.
-  N/A  props.minimal  Properties are minimal
-        Wrapper builds such as unsloth-studio omit required fields.
 recommendations (by impact)
   1. medium Raise the context size or shorten prompts.  [-c]
 overall: WARN (exit 1)
 ```
 
-Findings are sorted by severity, then by the impact of their recommendations. OK findings print without a detail line. Prefill here runs at 135 tok/s, under the 300 tok/s threshold, yet reports OK: 96.7 % of prompt tokens come from the prefix cache, so the lifetime rate only measures the short uncached tails, and it is still 5.5x decode. `prefill.slow` (WARN) fires only when the prefix-cache hit is under 50 % or unknown.
+Findings are sorted by severity, then by the impact of their recommendations. OK findings print without a detail line. Prefill here runs at 135 tok/s, under the 300 tok/s threshold, yet is not flagged: 96.7 % of prompt tokens come from the prefix cache, so the lifetime rate mixes short uncached tails with any large uncached prompt and `prefill.insufficient_data` (N/A) is reported instead. `prefill.slow` (WARN) fires only when the prefix-cache hit is under 50 % or unknown.
 
 Recommendations that name the same flag stay separate when their actions differ, so one finding asking to shrink `-c` and another asking to raise it both show up.
 
@@ -133,6 +134,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--history` | Number of points kept for the charts (default `300`). |
 | `--rate-window SEC` | Seconds over which chart rates and the queue check are computed (default `30.0`). |
 | `--vram-gib N` | GPU memory available, same as in `diagnose`; without it the memory check stays N/A on the dashboard. |
+| `--ram-gib N` | System RAM available for offloaded weights, same as in `diagnose`. |
 | `--weights-gib N` | Model weight size in GiB, same as in `diagnose`; the size reported by the server wins when present. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.

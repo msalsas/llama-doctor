@@ -3,8 +3,12 @@ import re
 import unittest
 from pathlib import Path
 
-from llama_doctor.analysis import BUILTIN_ANALYZERS
+from llama_doctor.analysis import BUILTIN_ANALYZERS, diagnose
+from llama_doctor.cli import build_parser
 from llama_doctor.dashboard.server import default_static_dir
+from llama_doctor.render.terminal import render_report
+
+from .support import make_context
 
 ROOT = Path(__file__).resolve().parent.parent
 ANALYSIS_DIR = ROOT / "src" / "llama_doctor" / "analysis"
@@ -61,6 +65,30 @@ class TestReadme(unittest.TestCase):
     def test_serve_documents_vram_gib(self):
         serve = self.readme.split("`llama-doctor serve URL`", 1)[1].split("\n## ", 1)[0]
         self.assertIn("`--vram-gib N`", serve)
+
+    def test_serve_documents_every_flag(self):
+        serve = self.readme.split("`llama-doctor serve URL`", 1)[1].split("\n## ", 1)[0]
+        parser = build_parser()
+        serve_parser = parser._subparsers._group_actions[0].choices["serve"]
+        flags = {option for action in serve_parser._actions for option in action.option_strings
+                 if option.startswith("--") and option != "--help"}
+        self.assertIn("--ram-gib", flags)
+        for flag in flags:
+            with self.subTest(flag=flag):
+                self.assertIn(f"`{flag}", serve)
+
+    def test_quick_start_example_matches_rendered_fixture(self):
+        """The example block is real output: analyzers run on a fixture with the same counters."""
+        quick_start = self.readme.split("## Quick start", 1)[1].split("\n## ", 1)[0]
+        block = re.search(r"```text\n(.*?)\n```", quick_start, re.DOTALL).group(1)
+        context = make_context("readme_example/metrics.txt", "readme_example/props.json",
+                               "readme_example/models.json")
+        rendered = render_report(diagnose(context), context.snapshot, target="http://laptop-msi:8888")
+        self.assertEqual(block, rendered)
+        self.assertNotIn("kv.ok", block)
+        self.assertIn("N/A  kv.insufficient_data", block)
+        findings = block.split("findings\n", 1)[1]
+        self.assertTrue(findings.startswith("  WARN context.near_limit"))
 
     def test_diagnose_and_serve_document_weights_gib(self):
         reference = self.readme.split("`llama-doctor diagnose URL`", 1)[1]

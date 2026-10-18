@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from itertools import pairwise
 
 from .base import DiagnosisContext
 
@@ -32,6 +33,21 @@ def decode_rate(ctx: DiagnosisContext) -> Rate | None:
     if ctx.metrics is not None and ctx.metrics.decode_tps is not None:
         return Rate(ctx.metrics.decode_tps, "lifetime")
     return None
+
+
+def mean_prompt_tokens(ctx: DiagnosisContext) -> float | None:
+    """Mean evaluated prompt tokens per completion step in the window, None without one.
+
+    Counters only move when a request completes, so each rise of prompt_tokens_total
+    between samples is one request's uncached prompt (or a few, if they finished together).
+    """
+    totals = [sample.prompt_tokens_total for sample in ctx.window]
+    steps = [
+        after - before
+        for before, after in pairwise(totals)
+        if before is not None and after is not None and after > before
+    ]
+    return sum(steps) / len(steps) if steps else None
 
 
 def deferred_peak(ctx: DiagnosisContext) -> float | None:

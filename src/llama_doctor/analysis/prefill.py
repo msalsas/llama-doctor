@@ -1,8 +1,16 @@
 from .base import DiagnosisContext, Finding, Impact, Recommendation, Severity
-from .signals import MIN_PREFILL_DECODE_RATIO, decode_rate, is_cpu_bound, prefill_rate
+from .signals import (
+    MIN_PREFILL_DECODE_RATIO,
+    decode_rate,
+    is_cpu_bound,
+    mean_prompt_tokens,
+    prefill_rate,
+)
 
 SLOW_PREFILL_TPS = 300.0
 HIGH_CACHE_HIT_RATIO = 0.5
+# Mean uncached prompt tokens per request above which a high cache hit no longer explains a low rate.
+LARGE_PROMPT_TOKENS = 2048
 
 
 def _evidence(ctx: DiagnosisContext) -> dict[str, float | str | None]:
@@ -19,6 +27,20 @@ def _versus_decode(prefill_tps: float, decode_tps: float | None) -> str:
             f"{MIN_PREFILL_DECODE_RATIO:g}x line below which prefill counts as CPU-bound")
 
 
+def _gpu_layers(impact: Impact) -> Recommendation:
+    return Recommendation("Check that every layer is on the GPU: set -ngl 999 and confirm the load log "
+                          "offloads all layers.",
+                          "Layers left on the CPU slow prompt processing the most.", impact, "-ngl")
+
+
+def _moe_experts(impact: Impact) -> Recommendation:
+    return Recommendation("Keep every layer on the GPU with -ngl 999 and move only expert tensors to the CPU: "
+                          "--cpu-moe for all of them, or --n-cpu-moe N for the first N layers, "
+                          "with N as low as VRAM allows.",
+                          "Attention and shared weights stay on the GPU; only sparse expert weights run "
+                          "from RAM.", impact, "--n-cpu-moe")
+
+
 def analyze(ctx: DiagnosisContext) -> list[Finding]:
     rate = prefill_rate(ctx)
     if rate is None:
@@ -27,13 +49,12 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
                         "Prefill rate unavailable", "Run --probe or process at least 1000 prompt tokens.",
                         {"prompt_tokens_total": total})]
     evidence = _evidence(ctx)
+    is_moe = ctx.props is not None and ctx.props.is_moe is True
     if is_cpu_bound(ctx):
-        if ctx.props is not None and ctx.props.is_moe is True:
+        if is_moe:
             recommendations = (
                 Recommendation("Use a smaller quantization.", "It can keep more experts in VRAM.", Impact.HIGH),
-                Recommendation("If the loaded model uses PLE/N-gram tables, put them on CPU or mmap.",
-                               "Only models that ship these tables (Qwen3-Next class) have them; skip it otherwise.",
-                               Impact.HIGH, "--ple-on-cpu"),
+                _moe_experts(Impact.HIGH),
                 Recommendation("Use MTP or speculative drafting at 2.", "Short drafts reduce CPU expert work.",
                                Impact.MEDIUM, "--draft-max"),
                 Recommendation("Reduce context to free VRAM for experts.", "More VRAM improves offload.",
@@ -54,21 +75,42 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
         hit = ctx.metrics.cache_hit_ratio if ctx.metrics and rate.source == "lifetime" else None
         evidence = {**evidence, "cache_hit_ratio": hit}
         versus_decode = _versus_decode(rate.value, evidence["decode_tps"])
+        measured = f"Prefill measures {rate.value:.0f} tok/s, under {SLOW_PREFILL_TPS:g} tok/s"
         if hit is not None and hit >= HIGH_CACHE_HIT_RATIO:
+            # A high hit only explains a low rate when every uncached tail is short; one large
+            # uncached prompt among many cached ones also gives a high hit.
+            mean_tokens = mean_prompt_tokens(ctx)
+            evidence = {**evidence, "mean_prompt_tokens": mean_tokens}
+            cached = f"{hit * 100:.0f} % of prompt tokens come from the prefix cache"
+            if mean_tokens is None:
+                return [Finding("prefill", "prefill.insufficient_data", Severity.INSUFFICIENT_DATA,
+                                "Prefill rate cannot be judged",
+                                f"{measured}, but {cached}, so the lifetime rate mixes short uncached tails "
+                                "with any large uncached prompt and cannot tell them apart. Run --probe for "
+                                "a cache-free measurement, or watch it under serve, whose window shows the "
+                                "uncached tokens per request.", evidence)]
+            if mean_tokens > LARGE_PROMPT_TOKENS:
+                return [Finding("prefill", "prefill.rate_unreliable", Severity.INSUFFICIENT_DATA,
+                                "Prefill rate is dominated by large prompts",
+                                f"{measured} and {cached}, yet requests in the window evaluated "
+                                f"{mean_tokens:.0f} uncached tokens on average, above {LARGE_PROMPT_TOKENS}: "
+                                "the average rate is dominated by large prompts, not short tails, so the "
+                                "cache hit does not explain it. Run --probe to measure prefill without the "
+                                "cache.", evidence)]
             return [Finding("prefill", "prefill.ok", Severity.OK, "Prefill throughput is healthy",
-                            f"Prefill measures {rate.value:.0f} tok/s, under {SLOW_PREFILL_TPS:g} tok/s, but "
-                            f"{hit * 100:.0f} % of prompt tokens come from the prefix cache, so the lifetime "
-                            f"rate only covers short uncached tails and reads low; {versus_decode}.",
-                            evidence)]
+                            f"{measured}, but {cached} and requests in the window evaluated only "
+                            f"{mean_tokens:.0f} uncached tokens on average, so the rate covers short tails "
+                            f"and reads low; {versus_decode}.", evidence)]
         if rate.source == "probe":
             cache_note = "measured by the probe with the prefix cache disabled"
         elif hit is None:
             cache_note = "with no prefix-cache hit data to explain it"
         else:
             cache_note = f"with only {hit * 100:.0f} % prefix-cache hits to explain it"
+        recommendations = (_gpu_layers(Impact.MEDIUM),) + ((_moe_experts(Impact.MEDIUM),) if is_moe else ())
         return [Finding("prefill", "prefill.slow", Severity.WARN, "Prefill is slow",
                         f"Prefill runs at {rate.value:.0f} tok/s, under {SLOW_PREFILL_TPS:g} tok/s, "
                         f"{cache_note}; {versus_decode}. The wait before the first token "
-                        "grows with prompt length.", evidence)]
+                        "grows with prompt length.", evidence, recommendations)]
     return [Finding("prefill", "prefill.ok", Severity.OK, "Prefill throughput is healthy",
                     f"Prefill throughput is at or above {SLOW_PREFILL_TPS:g} tok/s.", evidence)]

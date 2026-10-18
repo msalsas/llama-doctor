@@ -1,0 +1,1 @@
+{"default_generation_settings": {"n_ctx": 80128}, "total_slots": 1, "model_path": "unsloth/Qwen3.8-Flash-Next-GGUF", "build_info": "unsloth-studio/v0.1.908-beta"}

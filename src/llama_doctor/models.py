@@ -116,15 +116,13 @@ class MetricsSnapshot:
         return ratio(self.draft_tokens_accepted_total, self.draft_tokens_total)
 
 
+# Keys a llama-server /props is expected to carry. Startup settings such as n_gpu_layers,
+# n_threads and cache_type_k/v are read when present but no official build publishes them.
 PROPS_KEYS: tuple[str, ...] = (
     "model_path",
     "n_ctx",
     "total_slots",
     "build_info",
-    "n_gpu_layers",
-    "n_threads",
-    "cache_type_k",
-    "cache_type_v",
     "modalities",
 )
 
@@ -142,6 +140,9 @@ class PropsSnapshot:
     cache_type_v: str | None = None
     has_vision: bool | None = None
     is_moe: bool | None = None
+    # default_generation_settings.params["speculative.types"] without "none": () when the
+    # server says nothing is configured, None when it does not say.
+    spec_types: tuple[str, ...] | None = None
     missing: tuple[str, ...] = ()
 
     @classmethod
@@ -167,10 +168,16 @@ class PropsSnapshot:
             vision = modalities.get("vision")
             if isinstance(vision, bool):
                 has_vision = vision
+        if quant is None:
+            quant = parse_ftype(payload.get("model_ftype"), forbidden=forbidden)
         n_ctx = None
+        spec_types = None
         defaults = payload.get("default_generation_settings")
         if isinstance(defaults, dict):
             n_ctx = safe_int(defaults.get("n_ctx"))
+            params = defaults.get("params")
+            if isinstance(params, dict):
+                spec_types = parse_spec_types(params.get("speculative.types"))
         if n_ctx is None:
             n_ctx = safe_int(payload.get("n_ctx"))
         total_slots = safe_int(payload.get("total_slots"))
@@ -197,6 +204,7 @@ class PropsSnapshot:
             cache_type_v=cache_type_v,
             has_vision=has_vision,
             is_moe=is_moe,
+            spec_types=spec_types,
             missing=missing,
         )
 
@@ -212,6 +220,34 @@ def parse_quant(name: str) -> str | None:
     if match is None:
         return None
     return match.group(0).upper()
+
+
+_FTYPE_SIZES = {"small": "S", "medium": "M", "large": "L"}
+
+
+def parse_ftype(value: Any, forbidden: tuple[str, ...] = ()) -> str | None:
+    """Quant tag from llama.cpp's ftype name: ``Q4_K - Medium`` gives ``Q4_K_M``."""
+    text = safe_str(value, forbidden=forbidden)
+    if text is None:
+        return None
+    base, _, suffix = text.partition(" - ")
+    tag = "_".join(base.split()).upper()
+    size = _FTYPE_SIZES.get(suffix.strip().lower())
+    if size is not None:
+        tag += "_" + size
+    return tag if re.fullmatch(r"[A-Z0-9_]+", tag) else None
+
+
+def parse_spec_types(value: Any) -> tuple[str, ...] | None:
+    """Configured speculative types, without ``none``; None when the value is unreadable."""
+    if isinstance(value, str):
+        items = value.split(",")
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        items = value
+    else:
+        return None
+    names = (item.strip().lower() for item in items)
+    return tuple(name for name in names if re.fullmatch(r"[a-z0-9_.-]+", name) and name != "none")
 
 
 _MOE_RE = r"[-_]A\d+(?:\.\d+)?B(?=$|[-_.])|moe|mixtral|gpt-oss|deepseek|qwen3-next"

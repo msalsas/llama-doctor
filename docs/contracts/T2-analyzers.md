@@ -104,20 +104,29 @@ and so is the order within a list.
 - **prefill**: if there is no rate, INSUFFICIENT `prefill.insufficient_data`
   (evidence `prompt_tokens_total`; detail suggests `--probe`). If cpu-bound
   and `props.is_moe is True`, CRITICAL `prefill.moe_cpu_experts` with recs in
-  this order: HIGH None (smaller quant); HIGH `--ple-on-cpu` (conditional:
-  "If the loaded model uses PLE/N-gram tables, ..." to CPU/mmap); MEDIUM
+  this order: HIGH None (smaller quant); HIGH `--n-cpu-moe` (keep every layer
+  on the GPU with `-ngl 999` and move only expert tensors to the CPU with
+  `--cpu-moe`, or `--n-cpu-moe N` for the first N layers); MEDIUM
   `--draft-max` (MTP or speculative drafting at 2); LOW `-c` (smaller context
   frees VRAM for experts). If cpu-bound otherwise, WARN `prefill.cpu_bound`
   with recs HIGH `-ngl`, HIGH None (smaller quant), LOW `-c`. If prefill < 300
   (`SLOW_PREFILL_TPS`), add evidence `cache_hit_ratio` (lifetime
   `metrics.cache_hit_ratio`; None for a probe rate, since the probe disables the
-  prefix cache). With `cache_hit_ratio >= 0.5` (`HIGH_CACHE_HIT_RATIO`) it is OK
-  `prefill.ok`: cached tokens skip prefill, so the lifetime rate only covers
-  short uncached tails and reads low. Otherwise WARN `prefill.slow` with no
-  recs (`prefill.moe_cpu_experts` covers the real cause). Both details cite the
-  300 tok/s threshold and the prefill/decode ratio against the 2x CPU-bound
-  line. At or above 300, OK `prefill.ok`. Evidence on all rate paths:
-  `prefill_tps`, `decode_tps` (or None), `source`.
+  prefix cache). With `cache_hit_ratio >= 0.5` (`HIGH_CACHE_HIT_RATIO`) a high
+  hit only explains the low rate when uncached tails are short, since one large
+  uncached prompt among many cached ones also gives a high hit. Evidence adds
+  `mean_prompt_tokens` (`signals.mean_prompt_tokens`: mean rise of
+  `prompt_tokens_total` over the window steps where it rose; None one-shot or
+  with an idle window). None gives INSUFFICIENT `prefill.insufficient_data`
+  (detail suggests `--probe` or `serve`); above 2048 (`LARGE_PROMPT_TOKENS`)
+  gives INSUFFICIENT `prefill.rate_unreliable` (the average is dominated by
+  large prompts); otherwise OK `prefill.ok`. With a lower or unknown hit, WARN
+  `prefill.slow` with recs MEDIUM `-ngl` (check every layer is on the GPU,
+  `-ngl 999`) and, when `props.is_moe is True`, MEDIUM `--n-cpu-moe`
+  (`--cpu-moe` / `--n-cpu-moe N`). Details cite the 300 tok/s threshold and the
+  prefill/decode ratio against the 2x CPU-bound line. At or above 300, OK
+  `prefill.ok`. Evidence on all rate paths: `prefill_tps`, `decode_tps` (or
+  None), `source`.
 - **decode**: if there is no rate, INSUFFICIENT `decode.insufficient_data`.
   If decode < 10.0 (`SLOW_DECODE_TPS`), WARN `decode.slow`. When cpu-bound is
   True, it gets no recs and the detail points to the prefill finding as the
@@ -149,7 +158,12 @@ and so is the order within a list.
   (reduce client concurrency) and MEDIUM `--parallel` (more slots, raising `-c`
   too because it divides across slots); otherwise OK `queue.ok`.
 - **spec**: if draft_tokens_total or drafts_total is None, INSUFFICIENT
-  `spec.insufficient_data`. If drafts_total == 0, INFO `spec.inactive`. If
+  `spec.insufficient_data`. If drafts_total == 0 (llama-server exports the
+  counters at 0 even without speculative decoding), read `props.spec_types`:
+  `()` (speculative.types none) gives OK `spec.not_configured`; None (not
+  published) gives INSUFFICIENT `spec.insufficient_data`; configured types with
+  no generated tokens give INSUFFICIENT; configured types after generating
+  tokens give WARN `spec.inactive` (evidence `spec_types`, rec LOW None). If
   acceptance is None, INSUFFICIENT. Then the first matching rule wins:
   acceptance < 0.4 gives WARN `spec.low_acceptance` (MEDIUM `--draft-max`).
   Cpu-bound True with avg_len > 2.0 gives WARN `spec.drafts_too_long_offloaded`
@@ -170,10 +184,10 @@ and so is the order within a list.
   evidence `offloaded_gib = weights - vram`. Otherwise OK `memory.fits_vram`.
   Detail states this counts weights only.
 - **props** (module `props_check.py`): if props is None, INSUFFICIENT
-  `props.insufficient_data`. Non-empty `missing` gives INSUFFICIENT
-  `props.minimal` (evidence `missing` = comma-joined; detail mentions wrapper
-  builds such as unsloth-studio). If `n_ctx > models.n_ctx_train`, also emit WARN
-  `props.ctx_exceeds_training` (MEDIUM `-c`). With no findings, OK `props.ok`.
+  `props.insufficient_data`. Absent keys stay in `props.missing` for the
+  report and raise no finding: every analyzer that needs one already says so.
+  If `n_ctx > models.n_ctx_train`, emit WARN `props.ctx_exceeds_training`
+  (MEDIUM `-c`). With no findings, OK `props.ok`.
 
 ## serialize.py
 
@@ -227,14 +241,15 @@ evidence given:
 gives CRITICAL); `test_connectivity_metrics_disabled_501`;
 `test_connectivity_props_unavailable`;
 `test_prefill_moe_cpu_experts` (MOE gives CRITICAL, prefill_tps 40.0,
-decode_tps 7.0, and rec flags exactly `[None, "--ple-on-cpu", "--draft-max", "-c"]`
+decode_tps 7.0, and rec flags exactly `[None, "--n-cpu-moe", "--draft-max", "-c"]`
 with impacts `[HIGH, HIGH, MEDIUM, LOW]`); `test_prefill_cpu_bound_dense`
 (MOE context whose props are swapped via `dataclasses.replace` for
 `PropsSnapshot.from_payload({"model_path": "Llama-3.1-8B-Q4_K_M.gguf"})`
 gives WARN `prefill.cpu_bound`); `test_prefill_ok_healthy`
 (2000.0); `test_prefill_insufficient_minimal`; `test_prefill_slow` (probe
-250 / 20 gives WARN, no recs); `test_prefill_below_threshold_with_high_cache_hit_is_ok`
-(lifetime 135 tok/s with 96.7 % hits gives OK); `test_decode_slow_is_symptom` (MOE gives WARN, 7.0, recs ());
+250 / 20 gives WARN, recs `-ngl` then `--n-cpu-moe`); the high-hit cases
+(lifetime 135 tok/s with 96.7 % hits: one-shot gives `prefill.insufficient_data`,
+a window averaging 400 uncached tokens gives OK, 2100 gives `prefill.rate_unreliable`); `test_decode_slow_is_symptom` (MOE gives WARN, 7.0, recs ());
 `test_decode_ok_minimal` (30.0, OK); `test_prefix_cache_low_moe` (WARN,
 hit_ratio 0.1111111); `test_prefix_cache_ok_healthy` (0.75);
 `test_prefix_cache_insufficient_minimal`; `test_context_oversized_moe`
@@ -246,14 +261,15 @@ hit_ratio 0.1111111); `test_prefix_cache_ok_healthy` (0.75);
 (samples with `requests_deferred 3`); `test_spec_drafts_too_long_offloaded_moe`
 (avg 3.0, acceptance 0.4); `test_spec_raise_draft_healthy` (INFO, 2.0, 0.8);
 `test_spec_low_acceptance` (accepted 2000 of 9000); `test_spec_insufficient_minimal`;
-`test_spec_inactive`; `test_memory_partial_offload` (vram 8, ram 32 gives
+the spec zero-draft cases (`spec.not_configured`, `spec.insufficient_data`,
+WARN `spec.inactive` only with configured types); `test_memory_partial_offload` (vram 8, ram 32 gives
 INFO, offloaded_gib 8.5); `test_memory_exceeds_total` (vram 8, ram 4 gives
 CRITICAL); `test_memory_fits` (vram 24 gives OK); `test_memory_insufficient_without_hints`;
 `test_memory_server_size_wins_over_weights_hint`; `test_memory_uses_weights_hint_without_server_size`
 (`weights_source` "hint"); `test_memory_insufficient_when_weights_or_vram_missing`;
 `test_memory_rejects_invalid_weights_hint`;
-`test_props_minimal_unsloth` (INSUFFICIENT; missing evidence equals the T1
-tuple joined by ","); `test_props_ctx_exceeds_training` (models n_ctx_train
+`test_props_missing_fields_blame_nobody` (Unsloth props give OK);
+`test_props_ctx_exceeds_training` (models n_ctx_train
 16384 gives WARN); `test_props_ok_full`;
 `test_no_analyzer_raises_on_empty_context` (every BUILTIN func with metrics,
 props, and models all None returns a non-empty list and raises nothing).

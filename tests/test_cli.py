@@ -76,6 +76,12 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(run.call_args.kwargs["hints"], HostHints(vram_gib=24.0, weights_gib=16.5))
 
+    def test_serve_passes_ram_gib_to_dashboard(self):
+        with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
+            self._run(["serve", "http://127.0.0.1:1", "--vram-gib", "8", "--ram-gib", "32"])
+
+        self.assertEqual(run.call_args.kwargs["hints"], HostHints(vram_gib=8.0, ram_gib=32.0))
+
     def test_diagnose_uses_weights_gib_when_server_omits_size(self):
         models = json.dumps({"data": [{"id": "m"}]})
         with FakeLlamaServer() as server:

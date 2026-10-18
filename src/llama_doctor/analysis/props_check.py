@@ -6,13 +6,9 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
     if props is None:
         return [Finding("props", "props.insufficient_data", Severity.INSUFFICIENT_DATA,
                         "Properties unavailable", "The /props endpoint did not provide data.")]
+    # Absent keys are listed in props.missing for the report; each analyzer that needs one
+    # already says so, so they are not a finding of their own.
     findings: list[Finding] = []
-    if props.missing:
-        findings.append(Finding(
-            "props", "props.minimal", Severity.INSUFFICIENT_DATA,
-            "Properties are minimal", "Wrapper builds such as unsloth-studio omit required fields.",
-            {"missing": ",".join(props.missing)},
-        ))
     if (
         props.n_ctx is not None
         and ctx.models is not None
@@ -25,5 +21,6 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
             recommendations=(Recommendation("Reduce context to the training limit.",
                                             "Stay within trained context.", Impact.MEDIUM, "-c"),),
         ))
-    return findings or [Finding("props", "props.ok", Severity.OK, "Properties are complete",
-                                "Server properties are sufficient for diagnosis.")]
+    return findings or [Finding("props", "props.ok", Severity.OK, "Properties raise no issue",
+                                "The configured context fits the model's training context or "
+                                "cannot be compared with it.")]

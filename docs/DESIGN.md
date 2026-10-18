@@ -85,9 +85,15 @@ to 0 when the server is idle and are never used for rates.
 
 `PropsSnapshot`: `model_name, quant, build_info, cache_type_k, cache_type_v:
 str | None`; `n_ctx, total_slots, n_gpu_layers, n_threads: int | None`;
-`has_vision, is_moe: bool | None`; `missing: tuple[str, ...]` (whitelisted
-keys the server did not send). `is_moe` is a filename heuristic: True on a
-match, None otherwise, never False.
+`has_vision, is_moe: bool | None`; `spec_types: tuple[str, ...] | None`
+(`default_generation_settings.params["speculative.types"]` without `none`;
+None when unpublished); `missing: tuple[str, ...]` (whitelisted keys the
+server did not send, a report note rather than a finding). `n_gpu_layers`,
+`n_threads` and `cache_type_k/v` are startup flags no official llama-server
+publishes over HTTP, so they are read when present but never required. `quant`
+comes from the filename, else from `model_ftype` (`Q4_K - Medium` gives
+`Q4_K_M`). `is_moe` is a filename heuristic: True on a match, None otherwise,
+never False.
 
 `ModelsMeta`: `model_id: str | None`, `n_params, size_bytes, n_ctx_train:
 int | None`.
@@ -154,8 +160,8 @@ Prefill comes first. A CPU-bound prefill is defined as `prefill_tps < 100` or
 almost always means expert tensors are executing from system RAM: CRITICAL
 `prefill.moe_cpu_experts`. Slow decode is reported as a symptom that points
 back to this finding. Remedies, in impact order: smaller quant;
-if the loaded model uses PLE/N-gram tables, put them on CPU/mmap (`--ple-on-cpu`);
-MTP/speculative drafting at `--draft-max 2`; smaller `-c` to free VRAM for
+keep every layer on the GPU (`-ngl 999`) and move only expert tensors to the
+CPU (`--cpu-moe`, or `--n-cpu-moe N` for the first N layers); MTP/speculative drafting at `--draft-max 2`; smaller `-c` to free VRAM for
 experts.
 
 The speculative-decoding analyzer reads the same offload signal. Once layers

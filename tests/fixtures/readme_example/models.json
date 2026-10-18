@@ -1,0 +1,1 @@
+{"object": "list", "data": [{"id": "unsloth/Qwen3.8-Flash-Next-GGUF", "object": "model", "loaded": true, "quant": "UD-Q3_K_XL", "meta": {"size": 38654705664, "n_ctx_train": 262144}}]}

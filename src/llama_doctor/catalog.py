@@ -42,8 +42,9 @@ METRICS: dict[str, dict[str, str]] = {
             "It is a share of the cache's own capacity and moves with each request: at "
             "90 % or more the cache is saturated, which risks truncation or deferred "
             "requests. Whether the context is oversized is judged from the Context used "
-            "peak, not from this gauge. Some servers, such as Unsloth Studio, do not "
-            "export it."
+            "peak, not from this gauge. No current llama-server build exports this "
+            "metric, so the tile and chart normally read not exported; only older "
+            "builds still fill them."
         ),
     },
     "draft_length": {
@@ -54,7 +55,10 @@ METRICS: dict[str, dict[str, str]] = {
         ),
         "interpretation": (
             "Longer drafts only pay off while acceptance stays high; if acceptance drops "
-            "as drafts grow, lower --draft-max."
+            "as drafts grow, lower --draft-max. llama-server exports the draft counters "
+            "at 0 even when /props reports speculative.types none, so an empty chart is "
+            "normal there; llama-doctor only warns when speculative types are configured "
+            "and no drafts are recorded."
         ),
     },
     "acceptance": {

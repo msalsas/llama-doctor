@@ -13,8 +13,28 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
         return [Finding("spec", "spec.insufficient_data", Severity.INSUFFICIENT_DATA,
                         "Speculative decoding data unavailable", "Draft metrics are unavailable.")]
     if metrics.drafts_total == 0:
-        return [Finding("spec", "spec.inactive", Severity.INFO, "Speculative decoding inactive",
-                        "No drafts have been recorded.")]
+        # llama-server exports the draft counters at 0 even without speculative decoding,
+        # so zero drafts only matter when /props lists configured speculative types.
+        spec_types = ctx.props.spec_types if ctx.props else None
+        if spec_types == ():
+            return [Finding("spec", "spec.not_configured", Severity.OK, "Speculative decoding not configured",
+                            "The server reports speculative.types none, so no drafts are expected.")]
+        if spec_types is None:
+            return [Finding("spec", "spec.insufficient_data", Severity.INSUFFICIENT_DATA,
+                            "Speculative decoding data unavailable",
+                            "No drafts have been recorded and /props does not publish speculative.types, "
+                            "so it is unknown whether speculative decoding is configured.")]
+        if not metrics.tokens_predicted_total:
+            return [Finding("spec", "spec.insufficient_data", Severity.INSUFFICIENT_DATA,
+                            "Speculative decoding data unavailable",
+                            "Speculative decoding is configured but no tokens have been generated yet.")]
+        types = ",".join(spec_types)
+        return [Finding("spec", "spec.inactive", Severity.WARN, "Speculative decoding inactive",
+                        f"The server lists speculative types {types}, yet no drafts have been recorded "
+                        "while generating tokens.", {"spec_types": types},
+                        (Recommendation("Check the server log for draft model or speculative setup errors.",
+                                        "Configured speculative decoding that never drafts only adds cost.",
+                                        Impact.LOW),))]
     average = metrics.avg_draft_len
     acceptance = metrics.draft_acceptance
     if acceptance is None or average is None:

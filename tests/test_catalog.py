@@ -66,6 +66,18 @@ class TestCatalog(unittest.TestCase):
                 self.assertIn("the speculative mechanism (separate draft model or MTP head)", text)
                 self.assertNotIn("the draft model", text.replace("separate draft model", ""))
 
+    def test_kv_usage_says_no_current_server_exports_it(self):
+        text = METRICS["kv_usage"]["interpretation"]
+        self.assertIn("No current llama-server build exports", text)
+        self.assertNotIn("Unsloth", text)
+        self.assertNotIn("Some servers", text)
+
+    def test_draft_length_explains_when_inactive_drafts_warn(self):
+        text = METRICS["draft_length"]["interpretation"]
+        for phrase in ("speculative.types", "at 0", "only warns"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
     def test_slots_explain_shared_context_budget(self):
         text = METRICS["slots"]["interpretation"]
         for phrase in ("same -c", "--parallel", "less context"):

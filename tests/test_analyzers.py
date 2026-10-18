@@ -1,6 +1,7 @@
 import math
 import unittest
 from dataclasses import replace
+from pathlib import Path
 
 from llama_doctor.analysis import BUILTIN_ANALYZERS
 from llama_doctor.analysis.base import DiagnosisContext, HostHints, Severity
@@ -50,7 +51,10 @@ class TestAnalyzers(unittest.TestCase):
                             {"prefill_tps": 40.0, "decode_tps": 7.0, "source": "lifetime"})
         self.assertEqual([item.impact for item in finding.recommendations], [3, 3, 2, 1])
         self.assertEqual([item.flag for item in finding.recommendations],
-                         [None, "--ple-on-cpu", "--draft-max", "-c"])
+                         [None, "--n-cpu-moe", "--draft-max", "-c"])
+        experts = finding.recommendations[1]
+        for phrase in ("-ngl 999", "--cpu-moe", "--n-cpu-moe N"):
+            self.assertIn(phrase, experts.action)
 
     def test_prefill_cpu_bound_dense(self):
         props = PropsSnapshot.from_payload({"model_path": "Llama-3.1-8B-Q4_K_M.gguf"})
@@ -71,18 +75,32 @@ class TestAnalyzers(unittest.TestCase):
         self.assert_finding(finding, "prefill.insufficient_data", Severity.INSUFFICIENT_DATA,
                             {"prompt_tokens_total": 600.0})
 
-    def test_prefill_moe_ple_recommendation_is_conditional(self):
-        finding = findings(make_context(), "prefill")[0]
-        ple = next(item for item in finding.recommendations if item.flag == "--ple-on-cpu")
-        self.assertTrue(ple.action.startswith("If the loaded model uses PLE/N-gram tables"))
+    def test_no_recommendation_names_a_nonexistent_ple_flag(self):
+        root = Path(__file__).resolve().parent.parent
+        paths = [*(root / "src").rglob("*.py"), root / "README.md", *(root / "docs").rglob("*.md")]
+        for path in paths:
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotIn("--ple-on-cpu", text)
+                self.assertNotIn("PLE/N-gram", text)
 
     def test_prefill_slow(self):
         finding = findings(replace(make_context(), probe=ProbeResult(250, 20, 1200, 4, 0)), "prefill")[0]
         self.assert_finding(finding, "prefill.slow", Severity.WARN,
                             {"prefill_tps": 250, "decode_tps": 20, "source": "probe", "cache_hit_ratio": None})
-        self.assertEqual(finding.recommendations, ())
         for phrase in ("300 tok/s", "decode", "12.5x"):
             self.assertIn(phrase, finding.detail)
+        self.assertEqual([item.flag for item in finding.recommendations], ["-ngl", "--n-cpu-moe"])
+        self.assertIn("-ngl 999", finding.recommendations[0].action)
+        for phrase in ("--cpu-moe", "--n-cpu-moe N"):
+            self.assertIn(phrase, finding.recommendations[1].action)
+
+    def test_prefill_slow_dense_only_checks_gpu_layers(self):
+        props = PropsSnapshot.from_payload({"model_path": "Llama-3.1-8B-Q4_K_M.gguf"})
+        context = replace(make_context(), probe=ProbeResult(250, 20, 1200, 4, 0))
+        finding = findings(replace(context, snapshot=replace(context.snapshot, props=props)), "prefill")[0]
+        self.assertEqual(finding.code, "prefill.slow")
+        self.assertEqual([item.flag for item in finding.recommendations], ["-ngl"])
 
     def _lifetime_prefill(self, prompt_tps, cached_total):
         context = make_context("metrics_healthy.txt")
@@ -101,13 +119,59 @@ class TestAnalyzers(unittest.TestCase):
         self.assertEqual((finding.code, finding.severity), ("prefill.slow", Severity.WARN))
         self.assertIsNone(finding.evidence["cache_hit_ratio"])
 
-    def test_prefill_below_threshold_with_high_cache_hit_is_ok(self):
+    def _with_window(self, context, prompt_steps):
+        """Window whose prompt_tokens_total climbs by ``prompt_steps``; the last sample is current."""
+        current = context.metrics
+        totals = [current.prompt_tokens_total - sum(prompt_steps)]
+        for step in prompt_steps:
+            totals.append(totals[-1] + step)
+        window = tuple(replace(current, prompt_tokens_total=total, taken_at=float(index))
+                       for index, total in enumerate(totals))
+        return replace(context, window=window)
+
+    def test_prefill_high_cache_hit_without_window_is_insufficient(self):
         finding = findings(self._lifetime_prefill(135.0, 290000), "prefill")[0]
-        self.assertEqual((finding.code, finding.severity), ("prefill.ok", Severity.OK))
+        self.assertEqual((finding.code, finding.severity), ("prefill.insufficient_data", Severity.INSUFFICIENT_DATA))
         self.assertAlmostEqual(finding.evidence["cache_hit_ratio"], 0.966666, places=5)
+        self.assertIsNone(finding.evidence["mean_prompt_tokens"])
         self.assertEqual(finding.recommendations, ())
-        for phrase in ("300 tok/s", "prefix cache", "decode", "6.8x"):
+        for phrase in ("prefix cache", "--probe", "serve"):
             self.assertIn(phrase, finding.detail)
+
+    def test_prefill_high_cache_hit_with_short_window_prompts_is_ok(self):
+        context = self._with_window(self._lifetime_prefill(135.0, 290000), [0, 300, 0, 500])
+        finding = findings(context, "prefill")[0]
+        self.assertEqual((finding.code, finding.severity), ("prefill.ok", Severity.OK))
+        self.assertEqual(finding.evidence["mean_prompt_tokens"], 400)
+        self.assertEqual(finding.recommendations, ())
+        for phrase in ("300 tok/s", "prefix cache", "decode", "6.8x", "400"):
+            self.assertIn(phrase, finding.detail)
+
+    def test_prefill_high_cache_hit_with_large_window_prompts_is_unreliable(self):
+        context = self._with_window(self._lifetime_prefill(135.0, 290000), [200, 6000, 100])
+        finding = findings(context, "prefill")[0]
+        self.assertEqual((finding.code, finding.severity), ("prefill.rate_unreliable", Severity.INSUFFICIENT_DATA))
+        self.assertEqual(finding.evidence["mean_prompt_tokens"], 2100)
+        self.assertIn("large prompts", finding.detail)
+        self.assertIn("2048", finding.detail)
+
+    def test_prefill_large_prompt_threshold_is_a_module_constant(self):
+        from llama_doctor.analysis import prefill
+        self.assertEqual(prefill.LARGE_PROMPT_TOKENS, 2048)
+        at_limit = self._with_window(self._lifetime_prefill(135.0, 290000), [2048])
+        self.assertEqual(findings(at_limit, "prefill")[0].code, "prefill.ok")
+        above = self._with_window(self._lifetime_prefill(135.0, 290000), [2049])
+        self.assertEqual(findings(above, "prefill")[0].code, "prefill.rate_unreliable")
+
+    def test_prefill_high_cache_hit_with_idle_window_is_insufficient(self):
+        context = self._with_window(self._lifetime_prefill(135.0, 290000), [0, 0])
+        self.assertEqual(findings(context, "prefill")[0].code, "prefill.insufficient_data")
+
+    def test_prefill_slow_low_cache_hit_ignores_prompt_size(self):
+        context = self._with_window(self._lifetime_prefill(135.0, 10000 * 0.2 / 0.8), [6000])
+        finding = findings(context, "prefill")[0]
+        self.assertEqual((finding.code, finding.severity), ("prefill.slow", Severity.WARN))
+        self.assertTrue(finding.recommendations)
 
     def test_prefill_probe_ignores_cache_hit(self):
         context = replace(self._lifetime_prefill(135.0, 290000), probe=ProbeResult(250, 20, 1200, 4, 0))
@@ -228,11 +292,36 @@ class TestAnalyzers(unittest.TestCase):
         self.assert_finding(findings(make_context("metrics_minimal.txt", "props_unsloth_minimal.json", None), "spec")[0],
                             "spec.insufficient_data", Severity.INSUFFICIENT_DATA, {})
 
-    def test_spec_inactive(self):
+    def _spec_context(self, spec_types, drafts_total=0, tokens_predicted_total=5000):
         context = make_context()
-        finding = findings(replace(context, snapshot=replace(context.snapshot,
-                            metrics=replace(context.metrics, drafts_total=0))), "spec")[0]
-        self.assert_finding(finding, "spec.inactive", Severity.INFO, {})
+        return replace(context, snapshot=replace(
+            context.snapshot,
+            metrics=replace(context.metrics, drafts_total=drafts_total,
+                            tokens_predicted_total=tokens_predicted_total),
+            props=replace(context.snapshot.props, spec_types=spec_types)))
+
+    def test_spec_not_configured_is_neutral_ok(self):
+        finding = findings(self._spec_context(()), "spec")[0]
+        self.assert_finding(finding, "spec.not_configured", Severity.OK, {})
+        self.assertEqual(finding.recommendations, ())
+
+    def test_spec_unknown_types_with_zero_counters_is_insufficient(self):
+        finding = findings(self._spec_context(None), "spec")[0]
+        self.assert_finding(finding, "spec.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+        self.assertIn("speculative.types", finding.detail)
+
+    def test_spec_inactive_warns_only_when_types_configured(self):
+        finding = findings(self._spec_context(("draft",)), "spec")[0]
+        self.assert_finding(finding, "spec.inactive", Severity.WARN, {"spec_types": "draft"})
+        self.assertIn("draft", finding.detail)
+
+    def test_spec_configured_without_generation_is_insufficient(self):
+        finding = findings(self._spec_context(("draft",), tokens_predicted_total=0), "spec")[0]
+        self.assertEqual(finding.code, "spec.insufficient_data")
+
+    def test_spec_counters_moving_win_over_types_none(self):
+        finding = findings(self._spec_context((), drafts_total=1000), "spec")[0]
+        self.assertNotIn(finding.code, ("spec.not_configured", "spec.inactive", "spec.insufficient_data"))
 
     def test_memory_partial_offload(self):
         finding = findings(replace(make_context(), hints=HostHints(8, 32)), "memory")[0]
@@ -302,19 +391,28 @@ class TestAnalyzers(unittest.TestCase):
             self.assertEqual(findings(replace(make_context(), hints=hints), "memory")[0].code,
                              "memory.insufficient_data" if hints.vram_gib != 8 else "memory.partial_offload")
 
-    def test_props_minimal_unsloth(self):
+    def test_props_missing_fields_blame_nobody(self):
         finding = findings(make_context("metrics_minimal.txt", "props_unsloth_minimal.json", None), "props")[0]
-        self.assert_finding(finding, "props.minimal", Severity.INSUFFICIENT_DATA,
-                            {"missing": "n_ctx,n_gpu_layers,n_threads,cache_type_k,cache_type_v,modalities"})
+        self.assert_finding(finding, "props.ok", Severity.OK, {})
+        self.assertNotIn("unsloth", f"{finding.title} {finding.detail}".lower())
 
-    def test_props_collects_minimal_and_ctx_exceeds_training(self):
+    def test_props_startup_only_fields_are_not_required(self):
+        payload = {"default_generation_settings": {"n_ctx": 4096}, "total_slots": 1,
+                   "model_path": "/m/Llama-3.1-8B-Q4_K_M.gguf", "build_info": "b11712", "modalities": {}}
+        props = PropsSnapshot.from_payload(payload)
+        self.assertEqual(props.missing, ())
+        context = make_context()
+        context = replace(context, snapshot=replace(context.snapshot, props=props))
+        self.assertEqual([item.code for item in findings(context, "props")], ["props.ok"])
+
+    def test_props_missing_fields_do_not_mask_ctx_exceeds_training(self):
         props = PropsSnapshot(n_ctx=32768, missing=("modalities",))
         context = make_context()
         context = replace(context, snapshot=replace(context.snapshot, props=props,
                                                      models=replace(context.models, n_ctx_train=16384)))
         results = findings(context, "props")
-        self.assertEqual([item.code for item in results], ["props.minimal", "props.ctx_exceeds_training"])
-        self.assertEqual(results[1].severity, Severity.WARN)
+        self.assertEqual([item.code for item in results], ["props.ctx_exceeds_training"])
+        self.assertEqual(results[0].severity, Severity.WARN)
 
     def test_props_ctx_exceeds_training(self):
         context = make_context()

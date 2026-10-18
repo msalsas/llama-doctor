@@ -131,14 +131,7 @@ class TestPropsSnapshot(unittest.TestCase):
         self.assertTrue(snap.is_moe)
         self.assertEqual(
             snap.missing,
-            (
-                "n_ctx",
-                "n_gpu_layers",
-                "n_threads",
-                "cache_type_k",
-                "cache_type_v",
-                "modalities",
-            ),
+            ("n_ctx", "modalities"),
         )
 
     def test_props_never_hold_sentinels(self):
@@ -196,7 +189,7 @@ class TestPropsSnapshot(unittest.TestCase):
         self.assertNotIn("SENTINEL", repr(snap))
         self.assertEqual(
             snap.missing,
-            ("n_ctx", "total_slots", "n_gpu_layers", "n_threads", "cache_type_k", "cache_type_v", "modalities"),
+            ("n_ctx", "total_slots", "modalities"),
         )
 
     def test_props_present_but_invalid_not_missing(self):
@@ -212,8 +205,50 @@ class TestPropsSnapshot(unittest.TestCase):
         self.assertNotIn("modalities", snap.missing)
         self.assertEqual(
             snap.missing,
-            ("total_slots", "build_info", "n_gpu_layers", "n_threads", "cache_type_k", "cache_type_v"),
+            ("total_slots", "build_info"),
         )
+
+    def test_props_startup_flags_are_not_required_keys(self):
+        for key in ("n_gpu_layers", "n_threads", "cache_type_k", "cache_type_v"):
+            self.assertNotIn(key, PROPS_KEYS)
+
+    def test_props_quant_from_model_ftype(self):
+        cases = (
+            ("Q4_K - Medium", "Q4_K_M"),
+            ("Q5_K - Small", "Q5_K_S"),
+            ("Q8_0", "Q8_0"),
+            ("IQ2_XS - 2.3125 bpw", "IQ2_XS"),
+            ("MXFP4 MoE", "MXFP4_MOE"),
+            ("BF16", "BF16"),
+        )
+        for ftype, quant in cases:
+            with self.subTest(ftype=ftype):
+                snap = PropsSnapshot.from_payload({"model_path": "/m/model.gguf", "model_ftype": ftype})
+                self.assertEqual(snap.quant, quant)
+
+    def test_props_filename_quant_wins_over_model_ftype(self):
+        snap = PropsSnapshot.from_payload({"model_path": "/m/Qwen3-8B-UD-Q4_K_XL.gguf",
+                                           "model_ftype": "Q4_K - Medium"})
+        self.assertEqual(snap.quant, "UD-Q4_K_XL")
+
+    def _spec_types(self, params):
+        return PropsSnapshot.from_payload({"default_generation_settings": {"params": params}}).spec_types
+
+    def test_props_spec_types(self):
+        cases = (
+            ({"speculative.types": ["none"]}, ()),
+            ({"speculative.types": "none"}, ()),
+            ({"speculative.types": []}, ()),
+            ({"speculative.types": ["draft"]}, ("draft",)),
+            ({"speculative.types": "draft,ngram-cache"}, ("draft", "ngram-cache")),
+            ({"speculative.types": ["none", "MTP"]}, ("mtp",)),
+            ({"temperature": 0.8}, None),
+            ({"speculative.types": 3}, None),
+        )
+        for params, expected in cases:
+            with self.subTest(params=params):
+                self.assertEqual(self._spec_types(params), expected)
+        self.assertIsNone(PropsSnapshot.from_payload({}).spec_types)
 
 
 class TestQuantAndMoe(unittest.TestCase):
