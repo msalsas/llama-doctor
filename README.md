@@ -1,6 +1,6 @@
 # llama-doctor
 
-A command-line tool that reads a local LLM server's metrics and tells you what is misconfigured.
+A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured.
 
 [![CI](https://github.com/msalsas/llama-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/msalsas/llama-doctor/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
