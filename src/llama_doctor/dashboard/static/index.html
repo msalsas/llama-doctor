@@ -28,7 +28,6 @@
       <article id="tile-decode" class="tile"></article>
       <article id="tile-prefill" class="tile"></article>
       <article id="tile-cache" class="tile"></article>
-      <article id="tile-kv" class="tile"></article>
       <article id="tile-context" class="tile"></article>
       <article id="tile-queue" class="tile"></article>
     </section>
@@ -46,12 +45,11 @@
         <details><summary>Recent prefill points</summary><div class="table-wrap" data-table="prefill"></div></details>
       </article>
       <article class="panel">
-        <h2>KV, prefix cache and context</h2>
-        <div class="chart-wrap"><canvas id="chart-kv-cache" aria-label="KV usage, prefix cache hit and peak context used percentages" role="img"></canvas></div>
-        <p id="note-kv" class="chart-note hidden" role="note">KV usage not exported by this server</p>
+        <h2>Prefix cache and context</h2>
+        <div class="chart-wrap"><canvas id="chart-kv-cache" aria-label="Prefix cache hit and peak context used percentages" role="img"></canvas></div>
         <p id="note-cache-hit" class="chart-note hidden" role="note">Prefix cache hits not exported by this server</p>
         <p id="note-slots" class="chart-note hidden" role="note">Live slot data unavailable; context use is estimated from metrics</p>
-        <details><summary>Recent KV and cache points</summary><div class="table-wrap" data-table="kv-cache"></div></details>
+        <details><summary>Recent cache and context points</summary><div class="table-wrap" data-table="kv-cache"></div></details>
       </article>
       <article class="panel speculative">
         <h2>Speculative decoding <span class="secondary rate-window"></span></h2>

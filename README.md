@@ -88,17 +88,17 @@ llama-doctor serve http://127.0.0.1:8080
 
 `serve` runs a local HTTP server on port 8765; open `http://127.0.0.1:8765` in a browser. It polls the llama.cpp server every 2 s and keeps the last 300 points in memory. Chart rates are computed over a sliding 30 s window (`--rate-window`), because llama.cpp counters only move when a request completes.
 
-Tiles, left to right: Decode tok/s, Prefill tok/s, Prefix-cache hit, KV usage, Context, Queue.
+Tiles, left to right: Decode tok/s, Prefill tok/s, Prefix-cache hit, Context, Queue.
 
 - Decode, Prefill and Prefix-cache hit show the latest windowed value, with the lifetime average below it (or only the lifetime average while the server is idle).
-- KV usage is the current share of KV cache cells in use (`kv_cache_usage_ratio`), or `not exported` on servers that omit it. When it is omitted but `/slots` is readable, the tile shows an estimate (`~X %`, live tokens over slot capacity, `kv.estimated`); it can read high if the server runs with `--cache-idle-slots`. `kv.saturated` warns at 90 % or more and only from the real gauge.
+- Current llama-server builds and Unsloth Studio do not export a KV usage gauge, so the dashboard has no KV tile. Older builds that still export `kv_cache_usage_ratio` keep the KV findings (`kv.saturated` warns at 90 % or more of the real gauge; `kv.estimated` appears when only `/slots` is readable).
 - Context shows the peak tokens held in context as a share of `n_ctx` (`n_tokens_max / n_ctx`, for example `98.0 %` and `78.5k / 80.1k`). The peak is the highest point since the server started, not live use; when `/slots` is readable the tile reads `live X % - peak Y %`, where live is the tokens held by the slots right now (prompt plus decoded) over their summed `n_ctx`. `context.near_limit` warns at 90 % or more.
 - Queue shows requests being processed and, below it, requests deferred while waiting for a free slot (`requests_processing`, `requests_deferred`).
 
 Charts:
 
 - Decode throughput and Prefill throughput, in tokens per second, averaged over the rate window.
-- KV, prefix cache and context, in percent: KV usage, Prefix-cache hit, and Context used as a dashed line (a peak, not a live gauge).
+- Prefix cache and context, in percent: Prefix-cache hit, and Context used as a dashed line (a peak, not a live gauge).
 - Speculative decoding: Draft length in tokens and Draft acceptance in percent, averaged over the rate window.
 
 Every tile, chart and the quant, context and slots fields in the header have a help tooltip that says what the value measures and how to read it, independent of model or hardware.
@@ -121,7 +121,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
 | `--timeout SEC` | HTTP timeout per request. |
 | `--no-color` | Disable ANSI colour in text output. |
-| `--no-slots` | Do not read `GET /slots` (live context and the KV estimate). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
+| `--no-slots` | Do not read `GET /slots` (live context and the KV estimate in findings). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
 
 `--probe` is off by default. It is the only option that sends a write request to the server; everything else is a read-only GET.
 

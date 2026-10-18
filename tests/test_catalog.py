@@ -8,7 +8,6 @@ REQUIRED_IDS = {
     "decode_tps",
     "prefill_tps",
     "prefix_cache_hit",
-    "kv_usage",
     "draft_length",
     "acceptance",
     "queue_processing",
@@ -69,13 +68,6 @@ class TestCatalog(unittest.TestCase):
     def test_live_vs_peak_and_idle_slots_explained(self):
         self.assertIn("live", METRICS["context_used"]["description"])
         self.assertIn("peak", METRICS["context_used"]["description"])
-        self.assertIn("--cache-idle-slots", METRICS["kv_usage"]["interpretation"])
-
-    def test_kv_usage_says_no_current_server_exports_it(self):
-        text = METRICS["kv_usage"]["interpretation"]
-        self.assertIn("No current llama-server build exports", text)
-        self.assertNotIn("Unsloth", text)
-        self.assertNotIn("Some servers", text)
 
     def test_draft_length_explains_when_inactive_drafts_warn(self):
         text = METRICS["draft_length"]["interpretation"]

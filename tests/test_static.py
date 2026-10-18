@@ -58,7 +58,6 @@ class TestStaticFiles(unittest.TestCase):
             "tile-decode",
             "tile-prefill",
             "tile-cache",
-            "tile-kv",
             "tile-context",
             "tile-queue",
             "chart-decode",
@@ -71,7 +70,6 @@ class TestStaticFiles(unittest.TestCase):
             "skipped-list",
             "note-decode",
             "note-prefill",
-            "note-kv",
             "note-cache-hit",
             "note-slots",
         )
@@ -116,50 +114,35 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn("Math.abs(value) >= 1 ? 1 : 3", self.app_js)
         self.assertIn("`${key} ${displayNumber(value)}`", self.app_js)
 
-    def test_kv_tile_says_not_exported_without_lifetime_line(self):
-        self.assertIn('"not exported"', self.app_js)
-        self.assertIn("notes.kv_unexported === true", self.app_js)
-
-    def test_kv_tile_estimate_is_secondary_and_refers_to_context(self):
-        self.assertIn("estimated - see Context", self.app_js)
-        start = self.app_js.index("function renderKvTile")
-        body = self.app_js[start:self.app_js.index("function renderQueueTile")]
-        self.assertLess(body.index('"not exported", "hero"'), body.index("estimated - see Context"))
-        self.assertNotIn("`~${percent(number(kv.usage_ratio))}`", body)
-
-    def test_kv_tile_is_a_gauge_without_lifetime_average(self):
-        self.assertIn('percent(latest(history, "kv_usage_ratio"))', self.app_js)
-        self.assertNotIn("lifetime.kv_usage_ratio", self.app_js)
+    def test_kv_tile_is_gone(self):
+        self.assertNotIn("tile-kv", self.index + self.app_js)
+        self.assertNotIn("renderKvTile", self.app_js)
+        self.assertNotIn("note-kv", self.index + self.app_js)
 
     def test_metric_notes_start_hidden_and_are_styled(self):
-        for note in ("note-decode", "note-prefill", "note-kv", "note-cache-hit", "note-slots"):
+        for note in ("note-decode", "note-prefill", "note-cache-hit", "note-slots"):
             with self.subTest(note=note):
                 self.assertRegex(self.index, rf'id="{note}" class="chart-note hidden"')
                 self.assertIn(f'"{note}"', self.app_js)
         self.assertIn(".chart-note", self.app_css)
 
     def test_metric_notes_follow_sampler_flags(self):
-        for flag in ("decode_idle", "prefill_idle", "kv_unexported", "cache_hit_unexported", "slots_unavailable"):
+        for flag in ("decode_idle", "prefill_idle", "cache_hit_unexported", "slots_unavailable"):
             with self.subTest(flag=flag):
                 self.assertIn(flag, self.app_js)
 
-    def test_kv_and_cache_notes_explain_unexported_metrics(self):
-        self.assertIn(">KV usage not exported by this server<", self.index)
+    def test_cache_note_explains_unexported_metric(self):
         self.assertIn(">Prefix cache hits not exported by this server<", self.index)
 
-    def test_kv_and_cache_notes_sit_under_kv_chart(self):
+    def test_cache_notes_sit_under_cache_chart(self):
         canvas = self.index.index('id="chart-kv-cache"')
-        self.assertLess(canvas, self.index.index('id="note-kv"'))
-        self.assertLess(self.index.index('id="note-kv"'), self.index.index('id="note-cache-hit"'))
+        self.assertLess(canvas, self.index.index('id="note-cache-hit"'))
         self.assertLess(self.index.index('id="note-cache-hit"'), self.index.index('id="note-slots"'))
         self.assertLess(self.index.index('id="note-slots"'), self.index.index('data-table="kv-cache"'))
 
-    def test_slots_note_text_depends_on_slot_availability(self):
-        self.assertIn("Live slot data unavailable; context use is estimated from metrics", self.app_js)
-        self.assertIn("KV usage is estimated from /slots", self.app_js)
+    def test_slots_note_follows_slot_availability(self):
         self.assertIn("notes.slots_unavailable !== true", self.app_js)
-        self.assertIn("kv.estimated === true", self.app_js)
-        self.assertIn("updateSlotsNote(state, notes)", self.app_js)
+        self.assertIn("updateSlotsNote(notes)", self.app_js)
 
     def test_css_severity_classes(self):
         for severity in ("critical", "warn", "info", "ok", "insufficient_data"):
@@ -177,7 +160,6 @@ class TestStaticFiles(unittest.TestCase):
             "--text-3",
             "--s-decode",
             "--s-prefill",
-            "--s-kv",
             "--s-cache",
             "--s-draft",
             "--s-accept",
@@ -189,15 +171,15 @@ class TestStaticFiles(unittest.TestCase):
         for token in tokens:
             self.assertRegex(self.app_css, rf"{re.escape(token)}\s*:")
 
-    def test_six_tiles_share_one_row_with_equal_height_and_flexible_width(self):
-        self.assertEqual(self.index.count('class="tile"'), 6)
-        self.assertIn(".tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch;",
+    def test_five_tiles_share_one_row_with_equal_height_and_flexible_width(self):
+        self.assertEqual(self.index.count('class="tile"'), 5)
+        self.assertIn(".tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch;",
                       self.app_css)
         self.assertIn(".tile { padding: 16px; min-height: 102px; }", self.app_css)
 
-    def test_context_tile_sits_between_kv_and_queue(self):
-        kv, context, queue = (self.index.index(f'id="tile-{name}"') for name in ("kv", "context", "queue"))
-        self.assertLess(kv, context)
+    def test_context_tile_sits_between_cache_and_queue(self):
+        cache, context, queue = (self.index.index(f'id="tile-{name}"') for name in ("cache", "context", "queue"))
+        self.assertLess(cache, context)
         self.assertLess(context, queue)
         self.assertIn('"tile-context": "Context"', self.app_js)
 
@@ -210,9 +192,9 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn('`peak ${percent(number(context.used_ratio))}`, "secondary"', self.app_js)
         self.assertNotIn("live ${percent", self.app_js)
 
-    def test_kv_chart_has_context_used_series(self):
+    def test_cache_chart_has_context_used_series(self):
         self.assertIn('label: "Context used"', self.app_js)
-        self.assertIn('["kv_usage_ratio", "cache_hit_ratio", "context_used_ratio"]', self.app_js)
+        self.assertIn('["cache_hit_ratio", "context_used_ratio"]', self.app_js)
         self.assertIn('{ label: "Context used", key: "context_used_ratio", format: percent }', self.app_js)
         self.assertRegex(self.app_css, r"--s-ctx\s*:")
 
@@ -228,8 +210,8 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn("<summary>0 run, 0 skipped</summary>", self.index)
         self.assertNotIn("checks skipped", self.app_js + self.index)
 
-    def test_queue_tile_follows_kv_tile(self):
-        self.assertLess(self.index.index('id="tile-kv"'), self.index.index('id="tile-queue"'))
+    def test_queue_tile_follows_context_tile(self):
+        self.assertLess(self.index.index('id="tile-context"'), self.index.index('id="tile-queue"'))
         self.assertIn('"Queue"', self.app_js)
         self.assertIn('"requests_processing"', self.app_js)
         self.assertIn('"requests_deferred"', self.app_js)

@@ -6,7 +6,7 @@
   const byId = (id) => document.getElementById(id);
   const colors = {
     grid: color("--grid"), tick: color("--text-3"), legend: color("--text-2"), decode: color("--s-decode"),
-    prefill: color("--s-prefill"), kv: color("--s-kv"), cache: color("--s-cache"),
+    prefill: color("--s-prefill"), cache: color("--s-cache"),
     draft: color("--s-draft"), acceptance: color("--s-accept"), context: color("--s-ctx")
   };
   let lastState = null;
@@ -128,9 +128,8 @@
     decode: lineChart("chart-decode", "Decode (tokens/s)", [{ label: "Decode", data: [], borderColor: colors.decode, unit: "tok/s" }], false),
     prefill: lineChart("chart-prefill", "Prefill (tokens/s)", [{ label: "Prefill", data: [], borderColor: colors.prefill, unit: "tok/s" }], false),
     kvCache: lineChart("chart-kv-cache", "Usage (%)", [
-      { label: "KV usage", data: [], borderColor: colors.kv, backgroundColor: colors.kv, unit: "%" },
       { label: "Prefix-cache hit", data: [], borderColor: colors.cache, backgroundColor: colors.cache, unit: "%" },
-      // Dashed: a peak since server start, not a live gauge like the other two lines.
+      // Dashed: a peak since server start, not a live gauge like the other line.
       { label: "Context used", data: [], borderColor: colors.context, backgroundColor: colors.context, borderDash: [6, 4], unit: "%" }
     ], true),
     draft: lineChart("chart-draft-len", "Draft length (tokens)", [{ label: "Draft length", data: [], borderColor: colors.draft, unit: "tokens" }], false),
@@ -157,7 +156,7 @@
   function updateCharts(history) {
     updateChart(charts.decode, history, ["decode_tps"]);
     updateChart(charts.prefill, history, ["prefill_tps"]);
-    updateChart(charts.kvCache, history, ["kv_usage_ratio", "cache_hit_ratio", "context_used_ratio"]);
+    updateChart(charts.kvCache, history, ["cache_hit_ratio", "context_used_ratio"]);
     updateChart(charts.draft, history, ["avg_draft_len"]);
     updateChart(charts.acceptance, history, ["draft_acceptance"]);
   }
@@ -182,7 +181,6 @@
     "tile-decode": "Decode tok/s",
     "tile-prefill": "Prefill tok/s",
     "tile-cache": "Prefix-cache hit",
-    "tile-kv": "KV usage",
     "tile-context": "Context",
     "tile-queue": "Queue"
   };
@@ -204,20 +202,6 @@
     const hero = live === null ? lifetime : live;
     append(body, "div", formatter(hero), "hero");
     append(body, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
-  }
-
-  // KV usage is an instantaneous gauge with no lifetime average, so it gets no lifetime line.
-  function renderKvTile(history, unexported, kv) {
-    const body = tileValue("tile-kv");
-    if (unexported) {
-      append(body, "div", "not exported", "hero");
-      if (kv && kv.estimated === true && number(kv.usage_ratio) !== null) {
-        append(body, "div", `~${percent(number(kv.usage_ratio))} estimated - see Context`, "secondary");
-      }
-      return;
-    }
-    append(body, "div", percent(latest(history, "kv_usage_ratio")), "hero");
-    append(body, "div", "current", "secondary");
   }
 
   function renderQueueTile(history) {
@@ -247,7 +231,6 @@
     renderTile("tile-decode", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
     renderTile("tile-prefill", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
     renderTile("tile-cache", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
-    renderKvTile(history, notes.kv_unexported === true, state.kv && typeof state.kv === "object" ? state.kv : null);
     renderContextTile(state);
     renderQueueTile(history);
   }
@@ -258,12 +241,11 @@
     "tile-decode": ["decode_tps"],
     "tile-prefill": ["prefill_tps"],
     "tile-cache": ["prefix_cache_hit"],
-    "tile-kv": ["kv_usage"],
     "tile-context": ["context_used"],
     "tile-queue": ["queue_processing", "queue_deferred"],
     "chart-decode": ["decode_tps"],
     "chart-prefill": ["prefill_tps"],
-    "chart-kv-cache": ["kv_usage", "prefix_cache_hit", "context_used"],
+    "chart-kv-cache": ["prefix_cache_hit", "context_used"],
     "chart-draft-len": ["draft_length"],
     "chart-acceptance": ["acceptance"],
     "hdr-quant": ["quant"],
@@ -376,22 +358,12 @@
   const NOTE_IDS = {
     decode_idle: "note-decode",
     prefill_idle: "note-prefill",
-    kv_unexported: "note-kv",
     cache_hit_unexported: "note-cache-hit",
     slots_unavailable: "note-slots",
   };
 
-  const SLOTS_NOTE_FALLBACK = "Live slot data unavailable; context use is estimated from metrics";
-  const SLOTS_NOTE_ESTIMATED = "KV usage is estimated from /slots";
-
-  // With live slots the estimate comes from /slots; without them the old wording applies.
-  function updateSlotsNote(state, notes) {
-    const note = byId("note-slots");
-    const kv = state.kv && typeof state.kv === "object" ? state.kv : null;
-    const fromSlots = notes.slots_unavailable !== true && notes.kv_unexported === true
-      && kv !== null && kv.estimated === true;
-    note.textContent = fromSlots ? SLOTS_NOTE_ESTIMATED : SLOTS_NOTE_FALLBACK;
-    note.classList.toggle("hidden", !(fromSlots || notes.slots_unavailable === true));
+  function updateSlotsNote(notes) {
+    byId("note-slots").classList.toggle("hidden", notes.slots_unavailable !== true);
   }
 
   function updateNotes(state) {
@@ -399,7 +371,7 @@
     Object.entries(NOTE_IDS).forEach(([flag, id]) => {
       byId(id).classList.toggle("hidden", notes[flag] !== true);
     });
-    updateSlotsNote(state, notes);
+    updateSlotsNote(notes);
   }
 
   function updateRateWindow(state) {
@@ -459,7 +431,6 @@
     decode: [{ label: "tok/s", key: "decode_tps", format: rate }],
     prefill: [{ label: "tok/s", key: "prefill_tps", format: rate }],
     "kv-cache": [
-      { label: "KV usage", key: "kv_usage_ratio", format: percent },
       { label: "Prefix-cache hit", key: "cache_hit_ratio", format: percent },
       { label: "Context used", key: "context_used_ratio", format: percent }
     ],

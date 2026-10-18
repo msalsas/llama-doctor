@@ -9,7 +9,6 @@
   --text-3: #8f8e86;
   --s-decode: #3987e5;
   --s-prefill: #d95926;
-  --s-kv: #199e70;
   --s-cache: #c98500;
   --s-draft: #d55181;
   --s-accept: #9085e9;
@@ -61,7 +60,7 @@ dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .connection { margin: 0 0 16px; padding: 12px 16px; color: var(--text-2); }
 .hidden { display: none; }
 
-.tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch; margin-bottom: 16px; }
+.tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch; margin-bottom: 16px; }
 .tile { padding: 16px; min-height: 102px; }
 .tile-label, .secondary { color: var(--text-2); }
 .tile-label { font-size: 0.85rem; }

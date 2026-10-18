@@ -35,22 +35,6 @@ METRICS: dict[str, dict[str, str]] = {
             "prompt and tools byte-identical and put variable text last."
         ),
     },
-    "kv_usage": {
-        "label": "KV usage",
-        "description": "Fraction of KV cache cells currently holding context tokens.",
-        "interpretation": (
-            "It is a share of the cache's own capacity and moves with each request: at "
-            "90 % or more the cache is saturated, which risks truncation or deferred "
-            "requests. Whether the context is oversized is judged from the Context used "
-            "peak, not from this gauge. When the gauge is missing, the tile reads not "
-            "exported and a small line shows an estimate (live tokens over slot capacity) "
-            "from /slots, the same figure as the Context tile; it can read high if "
-            "the server runs with --cache-idle-slots, which keeps idle slots filled, and "
-            "it never raises the saturation warning. No current llama-server build exports this "
-            "metric, so the tile and chart normally read not exported; only older "
-            "builds still fill them."
-        ),
-    },
     "draft_length": {
         "label": "Draft length",
         "description": (

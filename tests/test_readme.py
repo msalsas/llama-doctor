@@ -51,7 +51,7 @@ class TestReadme(unittest.TestCase):
         app_js = (default_static_dir() / "app.js").read_text(encoding="utf-8")
         block = re.search(r"const TILE_LABELS = \{(.*?)\n  \};", app_js, re.DOTALL).group(1)
         labels = re.findall(r'"tile-[a-z]+": "([^"]+)"', block)
-        self.assertEqual(len(labels), 6)
+        self.assertEqual(len(labels), 5)
         self.assertIn(", ".join(labels), self.readme)
 
     def test_install_is_editable_and_pythonpath_runs_from_repo_root(self):
