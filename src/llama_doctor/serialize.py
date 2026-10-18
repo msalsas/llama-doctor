@@ -4,6 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .analysis.base import Finding, Recommendation, Report, Severity
+from .analysis.signals import context_used_ratio
 from .models import EndpointError, MetricsSnapshot, ModelsMeta, ProbeResult, PropsSnapshot
 
 
@@ -68,6 +69,25 @@ def rates_to_dict(metrics: MetricsSnapshot | None) -> dict[str, float | None]:
             "cache_hit_ratio": metrics.cache_hit_ratio, "avg_draft_len": metrics.avg_draft_len,
             "draft_acceptance": metrics.draft_acceptance, "kv_usage_ratio": metrics.kv_cache_usage_ratio,
             "n_tokens_max": metrics.n_tokens_max})
+
+
+def format_tokens(value: float | None) -> str | None:
+    """Compact token count: 999, 78.5k, 1.0M."""
+    if value is None or not math.isfinite(value):
+        return None
+    if abs(value) < 1000:
+        return str(round(value))
+    if abs(value) < 999_950:  # 999950 would print as 1000.0k
+        return f"{value / 1000:.1f}k"
+    return f"{value / 1_000_000:.1f}M"
+
+
+def context_to_dict(metrics: MetricsSnapshot | None, props: PropsSnapshot | None) -> dict[str, Any]:
+    n_tokens_max = metrics.n_tokens_max if metrics else None
+    n_ctx = props.n_ctx if props else None
+    ratio = context_used_ratio(n_tokens_max, n_ctx)
+    label = f"{format_tokens(n_tokens_max)} / {format_tokens(n_ctx)}" if ratio is not None else None
+    return _json_safe({"used_ratio": ratio, "n_tokens_max": n_tokens_max, "n_ctx": n_ctx, "label": label})
 
 
 def probe_to_dict(probe: ProbeResult | None) -> dict[str, Any] | None:

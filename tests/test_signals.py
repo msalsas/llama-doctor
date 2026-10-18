@@ -1,7 +1,12 @@
 import math
 import unittest
 
-from llama_doctor.analysis.signals import decode_rate, is_cpu_bound, prefill_rate
+from llama_doctor.analysis.signals import (
+    context_used_ratio,
+    decode_rate,
+    is_cpu_bound,
+    prefill_rate,
+)
 from llama_doctor.models import ProbeResult
 
 from .support import make_context
@@ -25,6 +30,16 @@ class TestSignals(unittest.TestCase):
     def test_unreliable_probe_ignored(self):
         rate = prefill_rate(make_context(probe=ProbeResult(850.0, 20.0, 500, 8, 0.0)))
         self.assertEqual((rate.value, rate.source), (40.0, "lifetime"))
+
+    def test_context_used_ratio(self):
+        self.assertAlmostEqual(context_used_ratio(78501, 80128), 0.97969499, places=8)
+        self.assertEqual(context_used_ratio(90000, 100000), 0.9)
+
+    def test_context_used_ratio_missing_or_invalid_is_none(self):
+        for n_tokens_max, n_ctx in ((None, 80128), (78501, None), (78501, 0), (math.nan, 80128),
+                                    (78501, math.inf), (-1, 80128)):
+            with self.subTest(n_tokens_max=n_tokens_max, n_ctx=n_ctx):
+                self.assertIsNone(context_used_ratio(n_tokens_max, n_ctx))
 
     def test_is_cpu_bound(self):
         self.assertTrue(is_cpu_bound(make_context()))

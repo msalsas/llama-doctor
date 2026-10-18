@@ -15,6 +15,7 @@ REQUIRED_IDS = {
     "queue_deferred",
     "quant",
     "context_tokens",
+    "context_used",
 }
 
 
@@ -50,6 +51,23 @@ class TestCatalog(unittest.TestCase):
 
     def test_dashboard_explains_every_catalog_entry(self):
         self.assertEqual(set(METRICS) - dashboard_metric_ids(self.app_js), set())
+
+    def test_context_used_explains_peak_and_unsloth(self):
+        text = " ".join(METRICS["context_used"].values())
+        for phrase in ("n_tokens_max", "peak", "instantaneous", "Unsloth"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+    def test_texts_are_model_agnostic(self):
+        pattern = re.compile(r"\d+\s*GB|tok/s|\b\d+(-\d+)?B\b|\bQ\d\b|\d+\s*-\s*\d+")
+        for metric_id, entry in METRICS.items():
+            with self.subTest(metric_id=metric_id):
+                self.assertIsNone(pattern.search(entry["interpretation"]))
+
+    def test_context_used_explained_on_tile_and_kv_chart(self):
+        block = re.search(r"const METRIC_INFO = \{(.*?)\n  \};", self.app_js, re.DOTALL).group(1)
+        self.assertRegex(block, r'"tile-context": \["context_used"\]')
+        self.assertRegex(block, r'"chart-kv-cache": \[[^\]]*"context_used"')
 
     def test_app_js_does_not_hardcode_catalog_text(self):
         for metric_id, entry in METRICS.items():

@@ -13,7 +13,7 @@ The live dashboard on an RTX 5080 rig running Unsloth Studio, serving Qwen3.8-Fl
 ## What it does
 
 - Reads `/metrics`, `/props` and `/v1/models` over HTTP. It never attaches to, restarts or reconfigures the server process.
-- Runs 8 analyzers that emit 35 distinct findings across connectivity, memory, cache, context sizing, speculative decoding, quantization and expert offload.
+- Runs 10 analyzers that emit 41 distinct findings across connectivity, memory, cache, context sizing, speculative decoding, quantization and expert offload.
 - Ranks recommendations by impact and names the server flag to change.
 - Returns an exit code per severity, so you can gate CI jobs or cron checks on it.
 - Optionally serves a local dashboard with live charts and findings.
@@ -83,6 +83,7 @@ llama-doctor serve http://127.0.0.1:8080
 
 - Every metric has a help tooltip that says what it measures and how to read it.
 - A Queue tile shows requests being processed and requests deferred while waiting for a free slot (`requests_processing`, `requests_deferred`).
+- A Context tile shows the peak tokens held in context as a share of `n_ctx` (`n_tokens_max / n_ctx`, for example `98.0 %` and `78.5k / 80.1k`). It is the highest point since the server started, not live use. The KV chart plots the same ratio as a dashed line, and `context.near_limit` warns at 90 % or more.
 
 ![Dashboard findings](docs/assets/dashboard-findings.png)
 

@@ -7,7 +7,7 @@
   const colors = {
     grid: color("--grid"), tick: color("--text-3"), legend: color("--text-2"), decode: color("--s-decode"),
     prefill: color("--s-prefill"), kv: color("--s-kv"), cache: color("--s-cache"),
-    draft: color("--s-draft"), acceptance: color("--s-accept")
+    draft: color("--s-draft"), acceptance: color("--s-accept"), context: color("--s-ctx")
   };
   let lastState = null;
   let retryDelay = 2000;
@@ -95,7 +95,11 @@
         animation: false, responsive: true, maintainAspectRatio: false, spanGaps: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { display: canvasId === "chart-kv-cache", labels: { color: colors.legend } },
+          // Line swatches carry each dataset's borderDash, so dashed series read as dashed in the legend too.
+          legend: {
+            display: canvasId === "chart-kv-cache",
+            labels: { color: colors.legend, usePointStyle: true, pointStyle: "line", pointStyleWidth: 28 }
+          },
           tooltip: {
             callbacks: {
               label(context) {
@@ -125,7 +129,9 @@
     prefill: lineChart("chart-prefill", "Prefill (tokens/s)", [{ label: "Prefill", data: [], borderColor: colors.prefill, unit: "tok/s" }], false),
     kvCache: lineChart("chart-kv-cache", "Usage (%)", [
       { label: "KV usage", data: [], borderColor: colors.kv, backgroundColor: colors.kv, unit: "%" },
-      { label: "Prefix-cache hit", data: [], borderColor: colors.cache, backgroundColor: colors.cache, unit: "%" }
+      { label: "Prefix-cache hit", data: [], borderColor: colors.cache, backgroundColor: colors.cache, unit: "%" },
+      // Dashed: a peak since server start, not a live gauge like the other two lines.
+      { label: "Context used", data: [], borderColor: colors.context, backgroundColor: colors.context, borderDash: [6, 4], unit: "%" }
     ], true),
     draft: lineChart("chart-draft-len", "Draft length (tokens)", [{ label: "Draft length", data: [], borderColor: colors.draft, unit: "tokens" }], false),
     acceptance: lineChart("chart-acceptance", "Acceptance (%)", [{ label: "Acceptance", data: [], borderColor: colors.acceptance, unit: "%" }], true)
@@ -151,7 +157,7 @@
   function updateCharts(history) {
     updateChart(charts.decode, history, ["decode_tps"]);
     updateChart(charts.prefill, history, ["prefill_tps"]);
-    updateChart(charts.kvCache, history, ["kv_usage_ratio", "cache_hit_ratio"]);
+    updateChart(charts.kvCache, history, ["kv_usage_ratio", "cache_hit_ratio", "context_used_ratio"]);
     updateChart(charts.draft, history, ["avg_draft_len"]);
     updateChart(charts.acceptance, history, ["draft_acceptance"]);
   }
@@ -177,6 +183,7 @@
     "tile-prefill": "Prefill tok/s",
     "tile-cache": "Prefix-cache hit",
     "tile-kv": "KV usage",
+    "tile-context": "Context",
     "tile-queue": "Queue"
   };
 
@@ -209,6 +216,14 @@
     append(body, "div", `${count(latest(history, "requests_deferred"))} waiting`, "secondary");
   }
 
+  // Peak tokens over n_ctx; ratio and "78.5k / 80.1k" label come preformatted from the sampler.
+  function renderContextTile(state) {
+    const context = state.context && typeof state.context === "object" ? state.context : {};
+    const body = tileValue("tile-context");
+    append(body, "div", percent(number(context.used_ratio)), "hero");
+    append(body, "div", text(context.label, "n/a"), "secondary");
+  }
+
   function updateTiles(state, history) {
     const lifetime = state.lifetime && typeof state.lifetime === "object" ? state.lifetime : {};
     const notes = state.notes && typeof state.notes === "object" ? state.notes : {};
@@ -217,6 +232,7 @@
     renderTile("tile-cache", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
     renderTile("tile-kv", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent,
       notes.kv_unexported === true);
+    renderContextTile(state);
     renderQueueTile(history);
   }
 
@@ -227,14 +243,20 @@
     "tile-prefill": ["prefill_tps"],
     "tile-cache": ["prefix_cache_hit"],
     "tile-kv": ["kv_usage"],
+    "tile-context": ["context_used"],
     "tile-queue": ["queue_processing", "queue_deferred"],
     "chart-decode": ["decode_tps"],
     "chart-prefill": ["prefill_tps"],
-    "chart-kv-cache": ["kv_usage", "prefix_cache_hit"],
+    "chart-kv-cache": ["kv_usage", "prefix_cache_hit", "context_used"],
     "chart-draft-len": ["draft_length"],
     "chart-acceptance": ["acceptance"],
     "hdr-quant": ["quant"],
     "hdr-ctx": ["context_tokens"]
+  };
+  // Tiles show a single info button; when one covers several entries each section gets this prefix.
+  const INFO_PREFIX = {
+    queue_processing: "Processing",
+    queue_deferred: "Deferred"
   };
   let infoCount = 0;
   let catalogLoaded = false;
@@ -250,10 +272,13 @@
     return element.previousElementSibling;
   }
 
-  function infoButton(host, metricId, entry) {
-    if (host.querySelector(`[data-metric="${metricId}"]`)) {
+  // items: [{ metricId, entry }]; more than one item renders prefixed sections in one tooltip.
+  function infoButton(host, items) {
+    const key = items.map((item) => item.metricId).join(" ");
+    if (host.querySelector(`[data-metric="${key}"]`)) {
       return;
     }
+    const combined = items.length > 1;
     infoCount += 1;
     const tipId = `info-tip-${infoCount}`;
     const wrap = document.createElement("span");
@@ -261,16 +286,22 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "info";
-    button.dataset.metric = metricId;
+    button.dataset.metric = key;
     button.textContent = "i";
-    button.setAttribute("aria-label", `About ${text(entry.label, metricId)}`);
+    const labels = items.map(({ metricId, entry }) => text(entry.label, metricId));
+    button.setAttribute("aria-label", `About ${labels.join(" and ")}`);
     button.setAttribute("aria-describedby", tipId);
     const tip = document.createElement("span");
     tip.id = tipId;
     tip.className = "chart-note info-tip";
     tip.setAttribute("role", "tooltip");
-    append(tip, "span", text(entry.description, ""));
-    append(tip, "span", text(entry.interpretation, ""));
+    items.forEach(({ metricId, entry }, index) => {
+      const description = append(tip, "span", text(entry.description, ""));
+      if (combined) {
+        description.prepend(`${INFO_PREFIX[metricId] || labels[index]}: `);
+      }
+      append(tip, "span", text(entry.interpretation, ""), "info-interp");
+    });
     // Escape hides the tooltip without moving focus or the pointer.
     button.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
@@ -287,13 +318,18 @@
       throw new Error("invalid catalog");
     }
     Object.entries(METRIC_INFO).forEach(([elementId, metricIds]) => {
-      const host = infoHost(byId(elementId));
-      metricIds.forEach((metricId) => {
-        const entry = catalog[metricId];
-        if (entry && typeof entry === "object") {
-          infoButton(host, metricId, entry);
+      const element = byId(elementId);
+      const host = infoHost(element);
+      const items = metricIds
+        .map((metricId) => ({ metricId, entry: catalog[metricId] }))
+        .filter(({ entry }) => entry && typeof entry === "object");
+      if (element.classList.contains("tile")) {
+        if (items.length) {
+          infoButton(host, items);
         }
-      });
+      } else {
+        items.forEach((item) => infoButton(host, [item]));
+      }
     });
   }
 
@@ -392,7 +428,8 @@
     prefill: [{ label: "tok/s", key: "prefill_tps", format: rate }],
     "kv-cache": [
       { label: "KV usage", key: "kv_usage_ratio", format: percent },
-      { label: "Prefix-cache hit", key: "cache_hit_ratio", format: percent }
+      { label: "Prefix-cache hit", key: "cache_hit_ratio", format: percent },
+      { label: "Context used", key: "context_used_ratio", format: percent }
     ],
     speculative: [
       { label: "draft tokens", key: "avg_draft_len", format: draft },
