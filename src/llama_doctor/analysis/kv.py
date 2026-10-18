@@ -1,7 +1,7 @@
 import math
 
 from .base import DiagnosisContext, Finding, Impact, Recommendation, Severity
-from .signals import deferred_peak, is_cpu_bound
+from .signals import is_cpu_bound
 
 
 def analyze(ctx: DiagnosisContext) -> list[Finding]:
@@ -10,12 +10,9 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
         return [Finding("kv", "kv.insufficient_data", Severity.INSUFFICIENT_DATA,
                         "KV cache data unavailable", "The metrics endpoint is unavailable.")]
     findings: list[Finding] = []
-    deferred = deferred_peak(ctx)
-    if (metrics.kv_cache_usage_ratio is not None and metrics.kv_cache_usage_ratio >= 0.9) or (
-        deferred is not None and deferred > 0
-    ):
+    if metrics.kv_cache_usage_ratio is not None and metrics.kv_cache_usage_ratio >= 0.9:
         findings.append(Finding("kv", "kv.saturated", Severity.WARN, "KV cache is saturated",
-                                "KV pressure is deferring or constraining requests.",
+                                "KV cache usage is near capacity, constraining requests.",
                                 recommendations=(Recommendation("Reduce parallel requests.",
                                                                 "Fewer concurrent requests reduce KV pressure.",
                                                                 Impact.MEDIUM, "--parallel"),)))

@@ -116,8 +116,8 @@ and so is the order within a list.
   with one rec LOW None. Otherwise OK `prefix_cache.ok`. Evidence:
   `hit_ratio`.
 - **kv**: if metrics is None, INSUFFICIENT `kv.insufficient_data`. Rule A:
-  `kv_cache_usage_ratio >= 0.9` or `deferred_peak > 0` gives WARN
-  `kv.saturated` (rec MEDIUM `--parallel`). Rule B needs `n_tokens_max` and
+  `kv_cache_usage_ratio >= 0.9` gives WARN `kv.saturated` (rec MEDIUM
+  `--parallel`); queued requests alone are `queue.deferred`, not KV. Rule B needs `n_tokens_max` and
   `props.n_ctx`, with `n_ctx >= 16384` and `n_tokens_max / n_ctx < 0.25`. It
   gives WARN `kv.context_oversized` with evidence `peak_ratio`, `n_ctx`,
   `n_tokens_max`, and `suggested_ctx = max(4096, ceil(2*n_tokens_max/4096)*4096)`.

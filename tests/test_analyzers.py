@@ -126,7 +126,7 @@ class TestAnalyzers(unittest.TestCase):
     def test_kv_saturated(self):
         context = make_context()
         finding = findings(replace(context, snapshot=replace(context.snapshot,
-                            metrics=replace(context.metrics, requests_deferred=3))), "kv")[0]
+                            metrics=replace(context.metrics, kv_cache_usage_ratio=0.95))), "kv")[0]
         self.assertEqual((finding.code, finding.severity), ("kv.saturated", Severity.WARN))
         self.assertEqual((finding.recommendations[0].impact, finding.recommendations[0].flag), (2, "--parallel"))
 
@@ -252,13 +252,24 @@ class TestAnalyzers(unittest.TestCase):
         self.assert_finding(findings(make_context(None), "queue")[0],
                             "queue.insufficient_data", Severity.INSUFFICIENT_DATA, {})
 
-    def test_kv_saturated_tracks_queue_peak(self):
+    def test_kv_saturated_ignores_queue_peak(self):
         for context in (make_context("queue_burst/1_during.txt"),
-                        self._burst_context("1_during", "2_during", "3_after")):
-            self.assertEqual(findings(context, "kv")[0].code, "kv.saturated")
-        for context in (make_context("queue_burst/3_after.txt"),
+                        self._burst_context("1_during", "2_during", "3_after"),
+                        make_context("queue_burst/3_after.txt"),
                         self._burst_context("0_base", "3_after")):
             self.assertNotIn("kv.saturated", [item.code for item in findings(context, "kv")])
+        context = self._burst_context("0_base", "3_after")
+        context = replace(context, snapshot=replace(context.snapshot,
+                          metrics=replace(context.metrics, kv_cache_usage_ratio=0.9)))
+        self.assertEqual(findings(context, "kv")[0].code, "kv.saturated")
+
+    def test_full_queue_with_low_kv_is_only_queue_deferred(self):
+        context = make_context("queue_burst/1_during.txt")
+        context = replace(context, snapshot=replace(context.snapshot,
+                          metrics=replace(context.metrics, kv_cache_usage_ratio=0.2)))
+        codes = [item.code for item in findings(context, "queue") + findings(context, "kv")]
+        self.assertIn("queue.deferred", codes)
+        self.assertNotIn("kv.saturated", codes)
 
     def test_no_analyzer_raises_on_empty_context(self):
         empty = DiagnosisContext(ServerSnapshot(0, None, None, None, {}))
