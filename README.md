@@ -46,7 +46,7 @@ llama-doctor diagnose http://laptop-msi:8888 --api-key-env UNSLOTH_API_KEY
 
 ```text
 llama-doctor 0.1.0  http://laptop-msi:8888
-model  Qwen3.8-Flash-Next-GGUF  quant -  ctx 80128  slots 1  build unsloth-studio/v0.1.908-beta
+model  Qwen3.8-Flash-Next-GGUF  quant UD-Q3_K_XL  ctx 80128  slots 1  build unsloth-studio/v0.1.908-beta
 
 rates (lifetime averages)
   prefill       135.2 tok/s
