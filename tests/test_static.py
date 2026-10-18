@@ -198,6 +198,11 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn("percent(number(context.used_ratio))", self.app_js)
         self.assertIn('text(context.label, "n/a")', self.app_js)
 
+    def test_context_tile_live_hero_with_peak_secondary_like_rate_tiles(self):
+        self.assertIn('append(body, "div", percent(used / capacity), "hero");', self.app_js)
+        self.assertIn('`peak ${percent(number(context.used_ratio))}`, "secondary"', self.app_js)
+        self.assertNotIn("live ${percent", self.app_js)
+
     def test_kv_chart_has_context_used_series(self):
         self.assertIn('label: "Context used"', self.app_js)
         self.assertIn('["kv_usage_ratio", "cache_hit_ratio", "context_used_ratio"]', self.app_js)

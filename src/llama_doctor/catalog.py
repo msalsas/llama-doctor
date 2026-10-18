@@ -125,9 +125,9 @@ METRICS: dict[str, dict[str, str]] = {
         "description": (
             "Peak tokens held in context since the server started (n_tokens_max) as a share of "
             "n_ctx; it is the highest point observed, not the instantaneous use of the current request. "
-            "When /slots is readable the tile reads 'live X % - peak Y %': live is the tokens "
-            "held by the slots right now (prompt plus decoded) over their summed n_ctx, peak is "
-            "this figure."
+            "When /slots is readable the tile's large value is live X %, the tokens "
+            "held by the slots right now (prompt plus decoded) over their summed n_ctx, and the "
+            "small line reads 'peak Y %', this figure."
         ),
         "interpretation": (
             "At 90 % or more the longest conversation nearly hit the window, so raise -c or trim "

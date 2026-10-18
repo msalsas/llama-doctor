@@ -235,7 +235,8 @@
     const used = number(context.live_used);
     const capacity = number(context.live_capacity);
     if (used !== null && capacity !== null && capacity > 0) {
-      append(body, "div", `live ${percent(used / capacity)} - peak ${percent(number(context.used_ratio))}`, "hero");
+      append(body, "div", percent(used / capacity), "hero");
+      append(body, "div", `peak ${percent(number(context.used_ratio))}`, "secondary");
     } else {
       append(body, "div", percent(number(context.used_ratio)), "hero");
     }
