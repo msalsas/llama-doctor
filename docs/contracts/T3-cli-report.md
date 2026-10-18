@@ -105,13 +105,13 @@ def main(argv: Sequence[str] | None = None) -> int
   critical and nothing else.
 - `--version` prints `llama-doctor <__version__>`.
 - `diagnose URL [--json] [--api-key-env VAR] [--timeout SEC (5.0)] [--probe]
-  [--vram-gib N] [--ram-gib N] [--no-color]`
+  [--vram-gib N] [--ram-gib N] [--weights-gib N] [--no-color]`
 - `serve URL [--host 127.0.0.1] [--port 8765] [--interval 2.0] [--history 300]
   [--rate-window SEC (30.0, must be > 0)] [--api-key-env VAR] [--timeout SEC]
-  [--vram-gib N]`.
+  [--vram-gib N] [--weights-gib N]`.
   Its handler builds the client and calls
   `llama_doctor.dashboard.server.run(client, host=..., port=..., interval=...,
-  history=..., rate_window=..., hints=HostHints(vram_gib=...), out=sys.stderr)
+  history=..., rate_window=..., hints=HostHints(vram_gib=..., weights_gib=...), out=sys.stderr)
   -> int`, imported inside the
   handler. T4 implements `run`; this task only wires the parser and the
   lazy call.
@@ -125,7 +125,7 @@ def main(argv: Sequence[str] | None = None) -> int
   `probe: warm-up plus one synthetic prompt (prefix cache disabled)` to
   stderr and run `run_probe`. If that returns None, write `probe: failed,
   using lifetime counters` to stderr. Then build the
-  `DiagnosisContext(snapshot, probe, HostHints(vram, ram))`, run `diagnose`,
+  `DiagnosisContext(snapshot, probe, HostHints(vram, ram, weights))`, run `diagnose`,
   and print either `json.dumps(diagnosis_document(...), indent=2,
   allow_nan=False)` or `render_report(..., color=use_color(sys.stdout,
   os.environ) and not args.no_color)`. Return `report.exit_code`.

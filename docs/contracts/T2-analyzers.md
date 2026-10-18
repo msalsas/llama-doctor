@@ -36,7 +36,7 @@ class Finding:
     recommendations: tuple[Recommendation, ...] = ()
     max_impact: int  # @property: max rec impact, 0 if none
 @dataclass(frozen=True)
-class HostHints: vram_gib: float | None = None; ram_gib: float | None = None
+class HostHints: vram_gib: float | None = None; ram_gib: float | None = None; weights_gib: float | None = None
 @dataclass(frozen=True)
 class DiagnosisContext:
     snapshot: ServerSnapshot; probe: ProbeResult | None = None; hints: HostHints = HostHints()
@@ -156,10 +156,15 @@ and so is the order within a list.
   (MEDIUM `--draft-max`, which sets 2). Cpu-bound not True, acceptance >= 0.7,
   and avg_len < 3.0 give INFO `spec.raise_draft` (MEDIUM `--draft-max`).
   Otherwise OK `spec.ok`. Evidence: `avg_draft_len`, `acceptance`.
-- **memory**: if `models.size_bytes` or `hints.vram_gib` is None,
-  INSUFFICIENT `memory.insufficient_data` (detail names `--vram-gib`/`--ram-gib`).
-  Negative or non-finite VRAM/RAM hints are treated as absent.
-  Let `weights_gib = size_bytes / 2**30`. If ram is given and
+- **memory**: weights are `models.size_bytes / 2**30` when the server reports
+  a size (`weights_source = "server"`), else `hints.weights_gib`
+  (`weights_source = "hint"`); the server value always wins. If weights or
+  `hints.vram_gib` is missing, INSUFFICIENT `memory.insufficient_data` with no
+  evidence (detail names the missing `--vram-gib`/`--weights-gib`, and
+  `--ram-gib` as optional). Negative or non-finite VRAM/RAM/weights hints are
+  treated as absent; a weights hint of 0 is also absent. Every other memory finding has evidence `weights_source`;
+  with a hint the detail also says the weights come from `--weights-gib`.
+  If ram is given and
   weights > vram + ram, CRITICAL `memory.exceeds_total` (rec HIGH None,
   smaller quant). If weights > vram, INFO `memory.partial_offload` with
   evidence `offloaded_gib = weights - vram`. Otherwise OK `memory.fits_vram`.
@@ -244,6 +249,9 @@ hit_ratio 0.1111111); `test_prefix_cache_ok_healthy` (0.75);
 `test_spec_inactive`; `test_memory_partial_offload` (vram 8, ram 32 gives
 INFO, offloaded_gib 8.5); `test_memory_exceeds_total` (vram 8, ram 4 gives
 CRITICAL); `test_memory_fits` (vram 24 gives OK); `test_memory_insufficient_without_hints`;
+`test_memory_server_size_wins_over_weights_hint`; `test_memory_uses_weights_hint_without_server_size`
+(`weights_source` "hint"); `test_memory_insufficient_when_weights_or_vram_missing`;
+`test_memory_rejects_invalid_weights_hint`;
 `test_props_minimal_unsloth` (INSUFFICIENT; missing evidence equals the T1
 tuple joined by ","); `test_props_ctx_exceeds_training` (models n_ctx_train
 16384 gives WARN); `test_props_ok_full`;

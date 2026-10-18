@@ -116,6 +116,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--probe` | Send a warm-up and one synthetic completion request to measure real latency. |
 | `--vram-gib N` | GPU memory available, used by the memory estimate. |
 | `--ram-gib N` | System RAM available for offloaded weights. |
+| `--weights-gib N` | Model weight size in GiB, used only when the server does not report it; the memory finding then shows `weights_source: hint`. |
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
 | `--timeout SEC` | HTTP timeout per request. |
 | `--no-color` | Disable ANSI colour in text output. |
@@ -132,6 +133,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--history` | Number of points kept for the charts (default `300`). |
 | `--rate-window SEC` | Seconds over which chart rates and the queue check are computed (default `30.0`). |
 | `--vram-gib N` | GPU memory available, same as in `diagnose`; without it the memory check stays N/A on the dashboard. |
+| `--weights-gib N` | Model weight size in GiB, same as in `diagnose`; the size reported by the server wins when present. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.
 
