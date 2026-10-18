@@ -67,6 +67,10 @@ class TestStaticFiles(unittest.TestCase):
             "findings-list",
             "recs-list",
             "skipped-list",
+            "note-decode",
+            "note-prefill",
+            "note-kv",
+            "note-cache-hit",
         )
         for identifier in identifiers:
             with self.subTest(identifier=identifier):
@@ -89,6 +93,39 @@ class TestStaticFiles(unittest.TestCase):
     def test_app_js_polls_state_endpoint(self):
         self.assertIn('"/api/state"', self.app_js)
         self.assertIn("no-store", self.app_js)
+
+    def test_chart_axes_have_unit_captions(self):
+        for caption in (
+            "Decode (tokens/s)",
+            "Prefill (tokens/s)",
+            "Usage (%)",
+            "Draft length (tokens)",
+            "Acceptance (%)",
+        ):
+            with self.subTest(caption=caption):
+                self.assertIn(f'"{caption}"', self.app_js)
+
+    def test_metric_notes_start_hidden_and_are_styled(self):
+        for note in ("note-decode", "note-prefill", "note-kv", "note-cache-hit"):
+            with self.subTest(note=note):
+                self.assertRegex(self.index, rf'id="{note}" class="chart-note hidden"')
+                self.assertIn(f'"{note}"', self.app_js)
+        self.assertIn(".chart-note", self.app_css)
+
+    def test_metric_notes_follow_sampler_flags(self):
+        for flag in ("decode_idle", "prefill_idle", "kv_unexported", "cache_hit_unexported"):
+            with self.subTest(flag=flag):
+                self.assertIn(flag, self.app_js)
+
+    def test_kv_and_cache_notes_explain_unexported_metrics(self):
+        self.assertIn(">KV usage not exported by this server<", self.index)
+        self.assertIn(">Prefix cache hits not exported by this server<", self.index)
+
+    def test_kv_and_cache_notes_sit_under_kv_chart(self):
+        canvas = self.index.index('id="chart-kv-cache"')
+        self.assertLess(canvas, self.index.index('id="note-kv"'))
+        self.assertLess(self.index.index('id="note-kv"'), self.index.index('id="note-cache-hit"'))
+        self.assertLess(self.index.index('id="note-cache-hit"'), self.index.index('data-table="kv-cache"'))
 
     def test_css_severity_classes(self):
         for severity in ("critical", "warn", "info", "ok", "insufficient_data"):

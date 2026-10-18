@@ -34,6 +34,12 @@ class TestAnalyzers(unittest.TestCase):
         self.assert_finding(finding, "connectivity.metrics_disabled", Severity.WARN, {})
         self.assertEqual((finding.recommendations[0].impact, finding.recommendations[0].flag), (3, "--metrics"))
 
+    def test_context_props_are_backfilled_server_props(self):
+        context = make_context("metrics_minimal.txt", "props_unsloth_minimal.json", "models_full.json")
+        self.assertEqual(context.props, context.snapshot.server_props)
+        self.assertEqual(context.props.quant, "UD-Q4_K_XL")
+        self.assertIsNone(context.snapshot.props.quant)
+
     def test_connectivity_props_unavailable(self):
         finding = findings(make_context(props=None), "connectivity")[0]
         self.assert_finding(finding, "connectivity.props_unavailable", Severity.INFO, {})

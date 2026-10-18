@@ -58,8 +58,12 @@ class Sampler:
   `version` (`llama_doctor.__version__`), `target`, `interval_s`,
   `updated_at` (taken_at of the last successful tick, else None), `server`
   (`props_to_dict`), `lifetime` (`rates_to_dict` of the latest metrics),
-  `history` (list, oldest first), `report` (`report_to_dict` or None), and
-  `errors` (`errors_to_dict`, or the sampler error dict).
+  `history` (list, oldest first), `report` (`report_to_dict` or None),
+  `errors` (`errors_to_dict`, or the sampler error dict), and `notes`
+  (booleans for chart notes). `kv_unexported` / `cache_hit_unexported`:
+  the latest metrics lack `kv_cache_usage_ratio` /
+  `prompt_tokens_cached_total`. `decode_idle` / `prefill_idle`: the lifetime
+  rate is known, history has at least 2 points, and every window rate is null.
 - `start()` launches a daemon thread named `llama-doctor-sampler`. Its loop
   is `tick()` then `stop_event.wait(interval)`. `stop()` sets the event and
   joins. A second `start()` while running is a no-op.

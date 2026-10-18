@@ -79,7 +79,7 @@
     return at(index) !== null && at(index - 1) === null && at(index + 1) === null ? 3 : 0;
   }
 
-  function lineChart(canvasId, datasets, percentScale) {
+  function lineChart(canvasId, caption, datasets, percentScale) {
     return new Chart(byId(canvasId), {
       type: "line",
       data: { labels: [], datasets },
@@ -102,7 +102,8 @@
           x: { grid: { color: colors.grid }, ticks: { color: colors.tick } },
           y: {
             beginAtZero: true, max: percentScale ? 100 : undefined,
-            grid: { color: colors.grid }, ticks: { color: colors.tick }
+            grid: { color: colors.grid }, ticks: { color: colors.tick },
+            title: { display: true, text: caption, color: colors.legend }
           }
         },
         elements: { line: { borderWidth: 2, tension: 0 }, point: { radius: isolatedPointRadius, hoverRadius: 4 } }
@@ -111,14 +112,14 @@
   }
 
   const charts = {
-    decode: lineChart("chart-decode", [{ label: "Decode", data: [], borderColor: colors.decode, unit: "tok/s" }], false),
-    prefill: lineChart("chart-prefill", [{ label: "Prefill", data: [], borderColor: colors.prefill, unit: "tok/s" }], false),
-    kvCache: lineChart("chart-kv-cache", [
+    decode: lineChart("chart-decode", "Decode (tokens/s)", [{ label: "Decode", data: [], borderColor: colors.decode, unit: "tok/s" }], false),
+    prefill: lineChart("chart-prefill", "Prefill (tokens/s)", [{ label: "Prefill", data: [], borderColor: colors.prefill, unit: "tok/s" }], false),
+    kvCache: lineChart("chart-kv-cache", "Usage (%)", [
       { label: "KV usage", data: [], borderColor: colors.kv, backgroundColor: colors.kv, unit: "%" },
       { label: "Prefix-cache hit", data: [], borderColor: colors.cache, backgroundColor: colors.cache, unit: "%" }
     ], true),
-    draft: lineChart("chart-draft-len", [{ label: "Draft length", data: [], borderColor: colors.draft, unit: "tokens" }], false),
-    acceptance: lineChart("chart-acceptance", [{ label: "Acceptance", data: [], borderColor: colors.acceptance, unit: "%" }], true)
+    draft: lineChart("chart-draft-len", "Draft length (tokens)", [{ label: "Draft length", data: [], borderColor: colors.draft, unit: "tokens" }], false),
+    acceptance: lineChart("chart-acceptance", "Acceptance (%)", [{ label: "Acceptance", data: [], borderColor: colors.acceptance, unit: "%" }], true)
   };
 
   function historyOf(state) {
@@ -171,6 +172,21 @@
     renderTile("tile-prefill", "Prefill tok/s", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
     renderTile("tile-cache", "Prefix-cache hit", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
     renderTile("tile-kv", "KV usage", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent);
+  }
+
+  // The sampler decides which notes apply; the note text lives in index.html.
+  const NOTE_IDS = {
+    decode_idle: "note-decode",
+    prefill_idle: "note-prefill",
+    kv_unexported: "note-kv",
+    cache_hit_unexported: "note-cache-hit",
+  };
+
+  function updateNotes(state) {
+    const notes = state.notes && typeof state.notes === "object" ? state.notes : {};
+    Object.entries(NOTE_IDS).forEach(([flag, id]) => {
+      byId(id).classList.toggle("hidden", notes[flag] !== true);
+    });
   }
 
   function updateRateWindow(state) {
@@ -316,6 +332,7 @@
     updateRateWindow(state);
     updateTiles(state, history);
     updateCharts(history);
+    updateNotes(state);
     updateTables(history);
     updateFindings(state);
     updateBanner(state);

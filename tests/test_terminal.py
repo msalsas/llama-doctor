@@ -193,6 +193,11 @@ overall: OK (exit 0)""",
         self.assertFalse(use_color(_Stream(True), {"TERM": "dumb"}))
         self.assertFalse(use_color(_Stream(False), {}))
 
+    def test_quant_from_models_meta_when_props_lack_it(self):
+        ctx = make_context("metrics_minimal.txt", "props_unsloth_minimal.json", "models_full.json")
+        output = render_report(diagnose(ctx), ctx.snapshot, target="http://server")
+        self.assertIn("model  Qwen3-30B-A3B-GGUF  quant UD-Q4_K_XL  ", output)
+
 
 if __name__ == "__main__":
     unittest.main()

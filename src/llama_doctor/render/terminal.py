@@ -54,7 +54,7 @@ def render_report(
     color: bool = False,
 ) -> str:
     """Render a concise terminal diagnosis report."""
-    props = snapshot.props
+    props = snapshot.server_props
     metrics = snapshot.metrics
     prefill = metrics.prefill_tps if metrics else None
     decode = metrics.decode_tps if metrics else None

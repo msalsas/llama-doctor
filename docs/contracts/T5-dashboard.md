@@ -44,7 +44,8 @@ history: [{t, decode_tps, prefill_tps, cache_hit_ratio, avg_draft_len, draft_acc
 report: {overall, exit_code, findings: [{analyzer, code, severity, title, detail,
          evidence: {k: v}, recommendations: [..]}], recommendations: [{action, rationale,
          impact, flag}]} | null,
-errors: {endpoint: reason}
+errors: {endpoint: reason},
+notes: {kv_unexported, cache_hit_unexported, decode_idle, prefill_idle}  // show note when true
 severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"high","medium","low"}
 ```
 

@@ -165,7 +165,7 @@ class Sampler:
             return
 
         with self._lock:
-            self._props = snapshot.props
+            self._props = snapshot.server_props
             self._metrics = snapshot.metrics
             self._report = report
             self._errors = errors_to_dict(snapshot.errors)
@@ -188,8 +188,31 @@ class Sampler:
             self._recent[0][1],
         )
 
+    def _notes(self, lifetime: dict[str, float | None]) -> dict[str, bool]:
+        """Chart notes: gauges the server never exports, and idle windows after past traffic.
+
+        Idle needs at least two points, since the first sample has no window baseline.
+        """
+        metrics = self._metrics
+
+        def idle(key: str) -> bool:
+            return (
+                lifetime[key] is not None
+                and len(self._history) >= 2
+                and all(point[key] is None for point in self._history)
+            )
+
+        return {
+            "kv_unexported": metrics is not None and metrics.kv_cache_usage_ratio is None,
+            "cache_hit_unexported": metrics is not None
+            and metrics.prompt_tokens_cached_total is None,
+            "decode_idle": idle("decode_tps"),
+            "prefill_idle": idle("prefill_tps"),
+        }
+
     def state(self) -> dict[str, Any]:
         with self._lock:
+            lifetime = rates_to_dict(self._metrics)
             return {
                 "version": __version__,
                 "target": self._target,
@@ -197,10 +220,11 @@ class Sampler:
                 "rate_window_s": self._rate_window,
                 "updated_at": self._updated_at,
                 "server": props_to_dict(self._props),
-                "lifetime": rates_to_dict(self._metrics),
+                "lifetime": lifetime,
                 "history": list(self._history),
                 "report": report_to_dict(self._report) if self._report is not None else None,
                 "errors": dict(self._errors),
+                "notes": self._notes(lifetime),
             }
 
     def _run(self) -> None:

@@ -178,7 +178,8 @@ DNS rebinding. Every response carries
   "lifetime": rates (counter totals),
   "history":  [ point, ... ]    oldest first, ring buffer (default 300)
   "report":   report_to_dict | null,
-  "errors":   { endpoint: reason } }
+  "errors":   { endpoint: reason },
+  "notes":    { kv_unexported, cache_hit_unexported, decode_idle, prefill_idle } }
 point = { "t", "decode_tps", "prefill_tps", "cache_hit_ratio",
           "avg_draft_len", "draft_acceptance", "kv_usage_ratio",
           "requests_processing" }

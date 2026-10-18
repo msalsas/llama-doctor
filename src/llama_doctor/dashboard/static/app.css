@@ -75,6 +75,14 @@ h3 { margin-top: 20px; }
 .chart-wrap { height: 220px; position: relative; }
 .speculative .chart-wrap { height: 150px; }
 canvas { max-width: 100%; }
+.chart-note {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.82rem;
+}
 details { margin-top: 12px; color: var(--text-2); }
 summary { cursor: pointer; }
 .table-wrap { overflow-x: auto; margin-top: 8px; }

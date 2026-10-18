@@ -29,7 +29,7 @@ def diagnosis_document(
         "taken_at": snapshot.taken_at,
         "overall": serialized_report["overall"],
         "exit_code": serialized_report["exit_code"],
-        "server": props_to_dict(snapshot.props),
+        "server": props_to_dict(snapshot.server_props),
         "model": models_to_dict(snapshot.models),
         "rates": rates_to_dict(snapshot.metrics),
         "probe": probe_to_dict(probe),

@@ -69,7 +69,7 @@ class DiagnosisContext:
 
     @property
     def props(self) -> PropsSnapshot | None:
-        return self.snapshot.props
+        return self.snapshot.server_props
 
     @property
     def models(self) -> ModelsMeta | None:

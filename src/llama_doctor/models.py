@@ -1,7 +1,7 @@
 import math
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .redact import safe_int, safe_str
@@ -213,31 +213,50 @@ def guess_moe(name: str) -> bool | None:
     return None
 
 
+def _model_key(name: str) -> str:
+    """Case-folded model name without path, ``.gguf``/``-GGUF`` suffix or quant tag."""
+    base = name.replace("\\", "/").rsplit("/", 1)[-1].lower().removesuffix(".gguf")
+    base = base.removesuffix("-gguf")
+    return re.sub(r"[-_.]?" + _QUANT_RE, "", base, count=1, flags=re.IGNORECASE)
+
+
+def _same_model(model_id: str | None, model_name: str | None) -> bool:
+    if model_id is None or model_name is None:
+        return False
+    return _model_key(model_id) == _model_key(model_name)
+
+
 @dataclass(frozen=True)
 class ModelsMeta:
     model_id: str | None = None
     n_params: int | None = None
     size_bytes: int | None = None
     n_ctx_train: int | None = None
+    quant: str | None = None
+    entry_loaded: bool = False
 
     @classmethod
     def from_payload(cls, payload: Any) -> "ModelsMeta":
         if not isinstance(payload, dict):
             return cls()
         data = payload.get("data")
-        if not isinstance(data, list) or not data:
+        if not isinstance(data, list):
             return cls()
-        first = data[0]
-        if not isinstance(first, dict):
+        entries = [entry for entry in data if isinstance(entry, dict)]
+        if not entries:
             return cls()
-        meta = first.get("meta")
+        # Unsloth Studio lists every downloaded model; only one is loaded:true.
+        entry = next((e for e in entries if e.get("loaded") is True), entries[0])
+        meta = entry.get("meta")
         if not isinstance(meta, dict):
             meta = {}
         return cls(
-            model_id=safe_str(first.get("id")),
+            model_id=safe_str(entry.get("id")),
             n_params=safe_int(meta.get("n_params")),
             size_bytes=safe_int(meta.get("size")),
             n_ctx_train=safe_int(meta.get("n_ctx_train")),
+            quant=safe_str(entry.get("quant")) or safe_str(meta.get("quant")),
+            entry_loaded=entry.get("loaded") is True,
         )
 
 
@@ -280,3 +299,30 @@ class ServerSnapshot:
     @property
     def alive(self) -> bool:
         return self.metrics is not None or self.models is not None
+
+    @property
+    def server_props(self) -> PropsSnapshot | None:
+        """Props for display, with name/quant/MoE gaps filled from /v1/models.
+
+        Unsloth Studio's /props reports a repo directory as model_path. The quant
+        comes from props, then a ``...-UD-Q4_K_XL.gguf`` style model id, then the
+        per-entry ``quant`` field of /v1/models. When no entry is ``loaded: true``
+        the first entry is only trusted if its id names the same model as props.
+        """
+        props = self.props
+        models = self.models
+        if props is None or models is None:
+            return props
+        stem = models.model_id.removesuffix(".gguf") if models.model_id else None
+        if not models.entry_loaded and not _same_model(stem, props.model_name):
+            return props
+        updates: dict[str, Any] = {}
+        if props.model_name is None and stem is not None:
+            updates["model_name"] = stem
+            if props.is_moe is None and guess_moe(stem) is not None:
+                updates["is_moe"] = guess_moe(stem)
+        if props.quant is None:
+            quant = (parse_quant(stem) if stem else None) or models.quant
+            if quant is not None:
+                updates["quant"] = quant
+        return replace(props, **updates) if updates else props

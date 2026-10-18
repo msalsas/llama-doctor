@@ -1,6 +1,6 @@
 import json
 import unittest
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from llama_doctor.models import (
     PROPS_KEYS,
@@ -226,6 +226,73 @@ class TestModelsMeta(unittest.TestCase):
         self.assertIsNone(meta.n_params)
         self.assertIsNone(meta.size_bytes)
         self.assertIsNone(meta.n_ctx_train)
+        self.assertIsNone(meta.quant)
+
+    def test_models_meta_picks_loaded_entry_not_first(self):
+        meta = ModelsMeta.from_payload(UNSLOTH_MODELS)
+        self.assertEqual(meta.model_id, "unsloth/Qwen3.8-Flash-Next-GGUF")
+        self.assertEqual(meta.quant, "UD-Q3_K_XL")
+
+    def test_models_meta_without_loaded_uses_first(self):
+        payload = {
+            "data": [
+                {"id": "a/First-GGUF", "quant": "Q4_K_M", "loaded": False},
+                {"id": "a/Second-GGUF", "quant": "Q8_0"},
+            ]
+        }
+        meta = ModelsMeta.from_payload(payload)
+        self.assertEqual(meta.model_id, "a/First-GGUF")
+        self.assertEqual(meta.quant, "Q4_K_M")
+        self.assertFalse(meta.entry_loaded)
+
+    def test_models_meta_flags_loaded_entry(self):
+        self.assertTrue(ModelsMeta.from_payload(UNSLOTH_MODELS).entry_loaded)
+        self.assertFalse(ModelsMeta.from_payload({"data": []}).entry_loaded)
+
+    def test_models_meta_loaded_must_be_true_not_truthy(self):
+        payload = {
+            "data": [
+                {"id": "a/First-GGUF", "quant": "Q4_K_M"},
+                {"id": "a/Second-GGUF", "quant": "Q8_0", "loaded": "yes"},
+            ]
+        }
+        self.assertEqual(ModelsMeta.from_payload(payload).model_id, "a/First-GGUF")
+
+    def test_models_meta_quant_from_meta_fallback(self):
+        payload = {"data": [{"id": "a/M-GGUF", "meta": {"quant": "IQ4_XS"}}]}
+        self.assertEqual(ModelsMeta.from_payload(payload).quant, "IQ4_XS")
+
+    def test_models_meta_top_level_quant_wins_over_meta(self):
+        payload = {"data": [{"id": "a/M-GGUF", "quant": "Q6_K", "meta": {"quant": "IQ4_XS"}}]}
+        self.assertEqual(ModelsMeta.from_payload(payload).quant, "Q6_K")
+
+    def test_models_meta_bad_top_level_quant_falls_back_to_meta(self):
+        payload = {"data": [{"id": "a/M-GGUF", "quant": 4, "meta": {"quant": "Q4_0"}}]}
+        self.assertEqual(ModelsMeta.from_payload(payload).quant, "Q4_0")
+
+    def test_models_meta_without_any_quant(self):
+        payload = {"data": [{"id": "a/M-GGUF", "loaded": True, "meta": "junk"}]}
+        meta = ModelsMeta.from_payload(payload)
+        self.assertEqual(meta.model_id, "a/M-GGUF")
+        self.assertIsNone(meta.quant)
+
+    def test_models_meta_skips_non_dict_entries(self):
+        payload = {"data": ["junk", {"id": "a/M-GGUF", "quant": "Q5_K_M", "loaded": True}]}
+        self.assertEqual(ModelsMeta.from_payload(payload).quant, "Q5_K_M")
+
+
+UNSLOTH_MODELS = {
+    "data": [
+        {"id": "unsloth/Qwen3.8-27B-GGUF", "quant": "UD-IQ3_S", "loaded": False},
+        {
+            "id": "unsloth/Qwen3.8-Flash-Next-GGUF",
+            "quant": "UD-Q3_K_XL",
+            "loaded": True,
+            "context_length": 80000,
+        },
+        {"id": "unsloth/gemma-5-12b-it-GGUF", "quant": "Q4_K_M", "loaded": False},
+    ]
+}
 
 
 class TestProbeAndSnapshot(unittest.TestCase):
@@ -256,6 +323,96 @@ class TestProbeAndSnapshot(unittest.TestCase):
             taken_at=1.0, metrics=None, props=None, models=ModelsMeta(), errors={}
         )
         self.assertTrue(models_only.alive)
+
+
+class TestServerProps(unittest.TestCase):
+    def setUp(self):
+        self.unsloth = PropsSnapshot.from_payload(
+            json.loads(load_fixture("props_unsloth_minimal.json"))
+        )
+        self.full = PropsSnapshot.from_payload(json.loads(load_fixture("props_full.json")))
+        self.models = ModelsMeta.from_payload(json.loads(load_fixture("models_full.json")))
+
+    def test_quant_backfilled_from_models_id(self):
+        snapshot = ServerSnapshot(0.0, None, self.unsloth, self.models, {})
+        server = snapshot.server_props
+        self.assertEqual(server.quant, "UD-Q4_K_XL")
+        self.assertEqual(server.model_name, "Qwen3-30B-A3B-GGUF")
+        self.assertEqual(server.missing, self.unsloth.missing)
+        self.assertIsNone(self.unsloth.quant)
+
+    def test_model_name_backfilled_when_props_have_none(self):
+        props = PropsSnapshot(total_slots=1)
+        models = replace(self.models, entry_loaded=True)
+        server = ServerSnapshot(0.0, None, props, models, {}).server_props
+        self.assertEqual(server.model_name, "Qwen3-30B-A3B-UD-Q4_K_XL")
+        self.assertEqual(server.quant, "UD-Q4_K_XL")
+        self.assertTrue(server.is_moe)
+
+    def test_props_values_win_over_models(self):
+        props = PropsSnapshot(model_name="local-model", quant="Q8_0")
+        server = ServerSnapshot(0.0, None, props, self.models, {}).server_props
+        self.assertIs(server, props)
+
+    def test_without_models_returns_props(self):
+        snapshot = ServerSnapshot(0.0, None, self.unsloth, None, {})
+        self.assertIs(snapshot.server_props, self.unsloth)
+        no_id = ServerSnapshot(0.0, None, self.unsloth, ModelsMeta(), {})
+        self.assertIs(no_id.server_props, self.unsloth)
+
+    def test_quant_from_models_field_when_id_has_no_suffix(self):
+        models = ModelsMeta.from_payload(UNSLOTH_MODELS)
+        server = ServerSnapshot(0.0, None, self.unsloth, models, {}).server_props
+        self.assertEqual(server.quant, "UD-Q3_K_XL")
+
+    def test_id_suffix_wins_over_models_field(self):
+        models = ModelsMeta(model_id="Qwen3-30B-A3B-UD-Q4_K_XL.gguf", quant="Q8_0")
+        server = ServerSnapshot(0.0, None, self.unsloth, models, {}).server_props
+        self.assertEqual(server.quant, "UD-Q4_K_XL")
+
+    def test_props_quant_wins_over_models_field(self):
+        props = PropsSnapshot(model_name="local-model", quant="Q8_0")
+        models = ModelsMeta.from_payload(UNSLOTH_MODELS)
+        self.assertIs(ServerSnapshot(0.0, None, props, models, {}).server_props, props)
+
+    def test_models_quant_used_even_without_id(self):
+        models = ModelsMeta(quant="Q5_K_M", entry_loaded=True)
+        server = ServerSnapshot(0.0, None, self.unsloth, models, {}).server_props
+        self.assertEqual(server.quant, "Q5_K_M")
+
+    def test_no_quant_anywhere_stays_none(self):
+        models = ModelsMeta.from_payload({"data": [{"id": "unsloth/Qwen3.8-27B-GGUF"}]})
+        server = ServerSnapshot(0.0, None, self.unsloth, models, {}).server_props
+        self.assertIsNone(server.quant)
+
+    def test_props_quant_not_overwritten_by_loaded_entry(self):
+        props = PropsSnapshot(model_name="Qwen3.8-Flash-Next-GGUF", quant="Q8_0")
+        models = ModelsMeta.from_payload(UNSLOTH_MODELS)
+        self.assertEqual(ServerSnapshot(0.0, None, props, models, {}).server_props.quant, "Q8_0")
+
+    def test_id_suffix_wins_over_models_field_on_loaded_entry(self):
+        models = ModelsMeta.from_payload(
+            {"data": [{"id": "Qwen3-30B-A3B-UD-Q4_K_XL.gguf", "quant": "Q8_0", "loaded": True}]}
+        )
+        server = ServerSnapshot(0.0, None, self.unsloth, models, {}).server_props
+        self.assertEqual(server.quant, "UD-Q4_K_XL")
+
+    def test_unloaded_unmatched_entry_not_backfilled(self):
+        payload = {"data": [{"id": "unsloth/gemma-5-12b-it-GGUF", "quant": "Q4_K_M"},
+                            {"id": "unsloth/Qwen3.8-27B-GGUF", "quant": "UD-IQ3_S"}]}
+        models = ModelsMeta.from_payload(payload)
+        self.assertIs(ServerSnapshot(0.0, None, self.unsloth, models, {}).server_props, self.unsloth)
+        bare = PropsSnapshot(total_slots=1)
+        self.assertIs(ServerSnapshot(0.0, None, bare, models, {}).server_props, bare)
+
+    def test_unloaded_entry_matching_model_path_is_backfilled(self):
+        props = PropsSnapshot.from_payload({"model_path": "/models/unsloth/Qwen3.8-27B-GGUF"})
+        payload = {"data": [{"id": "unsloth/Qwen3.8-27B-GGUF", "quant": "UD-IQ3_S"}]}
+        models = ModelsMeta.from_payload(payload)
+        self.assertEqual(ServerSnapshot(0.0, None, props, models, {}).server_props.quant, "UD-IQ3_S")
+
+    def test_without_props_returns_none(self):
+        self.assertIsNone(ServerSnapshot(0.0, None, None, self.models, {}).server_props)
 
 
 if __name__ == "__main__":

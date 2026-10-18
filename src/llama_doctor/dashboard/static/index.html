@@ -34,16 +34,20 @@
       <article class="panel">
         <h2>Decode throughput <span class="secondary rate-window"></span></h2>
         <div class="chart-wrap"><canvas id="chart-decode" aria-label="Decode throughput in tokens per second" role="img"></canvas></div>
+        <p id="note-decode" class="chart-note hidden" role="note">No recent decode activity; the tile above shows the lifetime average.</p>
         <details><summary>Recent decode points</summary><div class="table-wrap" data-table="decode"></div></details>
       </article>
       <article class="panel">
         <h2>Prefill throughput <span class="secondary rate-window"></span></h2>
         <div class="chart-wrap"><canvas id="chart-prefill" aria-label="Prefill throughput in tokens per second" role="img"></canvas></div>
+        <p id="note-prefill" class="chart-note hidden" role="note">No recent prefill activity; the tile above shows the lifetime average.</p>
         <details><summary>Recent prefill points</summary><div class="table-wrap" data-table="prefill"></div></details>
       </article>
       <article class="panel">
         <h2>KV and prefix cache</h2>
         <div class="chart-wrap"><canvas id="chart-kv-cache" aria-label="KV usage and prefix cache hit percentages" role="img"></canvas></div>
+        <p id="note-kv" class="chart-note hidden" role="note">KV usage not exported by this server</p>
+        <p id="note-cache-hit" class="chart-note hidden" role="note">Prefix cache hits not exported by this server</p>
         <details><summary>Recent KV and cache points</summary><div class="table-wrap" data-table="kv-cache"></div></details>
       </article>
       <article class="panel speculative">

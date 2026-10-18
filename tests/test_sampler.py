@@ -253,8 +253,75 @@ class TestSampler(unittest.TestCase):
                 "history",
                 "report",
                 "errors",
+                "notes",
             ),
         )
+
+    def _notes(self, samples_at):
+        sampler = Sampler(lambda: None, target="t", interval=2.0, rate_window=30.0)
+        self._run_ticks(sampler, samples_at)
+        return sampler.state()["notes"]
+
+    def test_notes_keys_exact(self):
+        self.assertEqual(
+            Sampler(lambda: None, target="t").state()["notes"],
+            {
+                "kv_unexported": False,
+                "cache_hit_unexported": False,
+                "decode_idle": False,
+                "prefill_idle": False,
+            },
+        )
+
+    def test_notes_flag_kv_usage_missing_from_server(self):
+        notes = self._notes({0.0: CURRENT, 2.0: CURRENT})
+
+        self.assertTrue(notes["kv_unexported"])
+        self.assertFalse(notes["cache_hit_unexported"])
+
+    def test_notes_flag_prefix_cache_counter_missing_from_server(self):
+        samples = dict(CURRENT)
+        del samples["prompt_tokens_cached_total"]
+
+        self.assertTrue(self._notes({0.0: samples})["cache_hit_unexported"])
+
+    def test_notes_exported_metrics_not_flagged_when_window_rates_idle(self):
+        samples = dict(CURRENT, kv_cache_usage_ratio=0.0)
+        notes = self._notes({float(taken_at): samples for taken_at in range(0, 20, 2)})
+
+        self.assertFalse(notes["kv_unexported"])
+        self.assertFalse(notes["cache_hit_unexported"])
+
+    def test_notes_idle_window_with_lifetime_traffic(self):
+        notes = self._notes({float(taken_at): CURRENT for taken_at in range(0, 20, 2)})
+
+        self.assertTrue(notes["decode_idle"])
+        self.assertTrue(notes["prefill_idle"])
+
+    def test_notes_single_point_is_never_idle(self):
+        notes = self._notes({0.0: CURRENT})
+
+        self.assertFalse(notes["decode_idle"])
+        self.assertFalse(notes["prefill_idle"])
+
+    def test_notes_null_lifetime_is_never_idle(self):
+        samples = {"kv_cache_usage_ratio": 0.0, "prompt_tokens_cached_total": 0.0}
+        notes = self._notes({float(taken_at): samples for taken_at in range(0, 20, 2)})
+
+        self.assertFalse(notes["decode_idle"])
+        self.assertFalse(notes["prefill_idle"])
+
+    def test_notes_active_window_is_not_idle(self):
+        notes = self._notes({0.0: PREVIOUS, 2.0: CURRENT})
+
+        self.assertFalse(notes["decode_idle"])
+        self.assertFalse(notes["prefill_idle"])
+
+    def test_notes_without_metrics_snapshot_are_false(self):
+        sampler = Sampler(lambda: _snapshot(None), target="t")
+        sampler.tick()
+
+        self.assertFalse(any(sampler.state()["notes"].values()))
 
     def test_state_moe_report(self):
         metrics = MetricsSnapshot.from_samples(
@@ -272,6 +339,19 @@ class TestSampler(unittest.TestCase):
         state = sampler.state()
         self.assertEqual(state["report"]["overall"], "critical")
         self.assertEqual(state["server"]["quant"], "UD-Q4_K_XL")
+
+    def test_state_server_quant_from_models_meta(self):
+        from llama_doctor.models import ModelsMeta, PropsSnapshot
+
+        props = PropsSnapshot.from_payload(json.loads(load_fixture("props_unsloth_minimal.json")))
+        models = ModelsMeta.from_payload(json.loads(load_fixture("models_full.json")))
+        sampler = Sampler(
+            lambda: ServerSnapshot(1.0, None, props, models, {}),
+            target="http://server",
+        )
+        sampler.tick()
+
+        self.assertEqual(sampler.state()["server"]["quant"], "UD-Q4_K_XL")
 
     def test_state_has_no_sentinel(self):
         for fixture in ("props_full.json", "props_unsloth_minimal.json"):
