@@ -34,15 +34,18 @@ setuptools that is `[tool.setuptools.package-data] "llama_doctor.dashboard" =
 ## /api/state schema (produced by T4)
 
 ```
-version, target, interval_s, updated_at: float|null,
+version, target, interval_s, rate_window_s, updated_at: float|null,
 server: {model_name, quant, n_ctx, total_slots, build_info, n_gpu_layers, n_threads,
          cache_type_k, cache_type_v, has_vision, is_moe, missing: [..]} | null,
 lifetime: {prefill_tps, decode_tps, cache_hit_ratio, avg_draft_len, draft_acceptance,
-           kv_usage_ratio, n_tokens_max},
+           kv_usage_ratio, n_tokens_max},          // kv_usage_ratio, n_tokens_max: current gauges
 history: [{t, decode_tps, prefill_tps, cache_hit_ratio, avg_draft_len, draft_acceptance,
-           kv_usage_ratio, requests_processing, requests_deferred}],
+           kv_usage_ratio, requests_processing, requests_deferred, context_used_ratio}],
                                                        // null = no data, draw a gap;
-                                                       // requests_* are instantaneous gauges
+                                                       // kv_usage_ratio, requests_* are
+                                                       // instantaneous gauges;
+                                                       // context_used_ratio is a peak
+context: {used_ratio, n_tokens_max, n_ctx, label},     // label like "78.5k / 80.1k"
 report: {overall, exit_code, findings: [{analyzer, code, severity, title, detail,
          evidence: {k: v}, recommendations: [..]}], recommendations: [{action, rationale,
          impact, flag}]} | null,
@@ -63,17 +66,26 @@ severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"hig
 - `conn-banner`: hidden by default. It shows `dashboard disconnected,
   retrying` when the fetch fails, or `server unreachable` plus the endpoint
   errors when `errors` is non-empty and `history` is empty.
-- Stat tiles: `tile-decode`, `tile-prefill`, `tile-cache`, `tile-kv`. Each
-  shows the latest non-null live value from `history` as the hero number,
+- Stat tiles, in this order: `tile-decode` (Decode tok/s), `tile-prefill`
+  (Prefill tok/s), `tile-cache` (Prefix-cache hit), `tile-kv` (KV usage),
+  `tile-context` (Context), `tile-queue` (Queue). Decode, prefill and cache
+  show the latest non-null live value from `history` as the hero number,
   with a smaller secondary line `lifetime <value>`. With no live value, the
   hero shows the lifetime value, labeled `lifetime avg`. `n/a` when both are
-  null.
+  null. KV usage is a gauge with no lifetime average: its hero is the latest
+  `kv_usage_ratio`, secondary `current`, or `not exported` when
+  `notes.kv_unexported`. Context shows `context.used_ratio` as a percent with
+  `context.label` below it. Queue shows `requests_processing` with
+  `<requests_deferred> waiting` below it.
+- Info tooltips: text comes only from `GET /api/catalog`. Tiles get one
+  button (Queue combines `queue_processing` and `queue_deferred`); each chart
+  header gets one per series; `hdr-quant`, `hdr-ctx` and `hdr-slots` get one.
 - Chart panels, each a `<canvas>` with a descriptive `aria-label` and a
   `<details>` that holds a table of the last 20 points. `chart-decode`
   (tok/s) and `chart-prefill` (tok/s) are separate charts, because their
   scales differ by 10-100x and one chart gets one y axis.
-  `chart-kv-cache` has two series in percent, KV usage and prefix-cache
-  hit, with a legend. The speculative-decoding panel holds
+  `chart-kv-cache` has three series in percent, KV usage, prefix-cache
+  hit and Context used (dashed, a peak), with a legend. The speculative-decoding panel holds
   `chart-draft-len` (tokens) and `chart-acceptance` (percent) as two small
   stacked charts.
 - Findings panel: `findings-list` holds non-OK, non-insufficient findings in
@@ -91,7 +103,7 @@ severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"hig
 --bg #121211  --surface #1a1a19  --surface-2 #232321  --border #2e2e2b  --grid #2a2a28
 --text #f0efec  --text-2 #c3c2b7  --text-3 #8f8e86
 --s-decode #3987e5  --s-prefill #d95926  --s-kv #199e70  --s-cache #c98500
---s-draft #d55181  --s-accept #9085e9
+--s-draft #d55181  --s-accept #9085e9  --s-ctx (Context used series)
 --ok #0ca30c  --warn #fab219  --crit #d03b3b  --info var(--text-2)
 ```
 - `color-scheme: dark`. Font stacks: `system-ui, sans-serif` for text,
@@ -114,7 +126,8 @@ severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"hig
   tokens are the single source of truth.
 - Chart.js options for every chart: `animation: false`, `responsive: true`,
   `maintainAspectRatio: false`, `spanGaps: false` (nulls show as gaps), line
-  `borderWidth: 2`, `pointRadius: 0`, `pointHoverRadius: 4`, `tension: 0`,
+  `borderWidth: 2`, point radius 0 except 3 on a point isolated between
+  gaps (so it stays visible), `pointHoverRadius: 4`, `tension: 0`,
   `interaction: {mode: "index", intersect: false}`, y `beginAtZero: true`
   (percent charts fixed 0-100), grid color `--grid`, tick color `--text-3`.
   Show the legend only on `chart-kv-cache`. The tooltip shows the value with
@@ -143,8 +156,9 @@ severity in {"critical","warn","info","ok","insufficient_data"}; impact in {"hig
   `<script>` without `src`, and nothing matching `\son[a-z]+=`.
 - `test_required_ids_once`: each of `hdr-target hdr-model hdr-quant hdr-ctx
   hdr-slots hdr-build overall-badge updated-at conn-banner tile-decode
-  tile-prefill tile-cache tile-kv chart-decode chart-prefill chart-kv-cache
-  chart-draft-len chart-acceptance findings-list recs-list skipped-list`
+  tile-prefill tile-cache tile-kv tile-context tile-queue chart-decode
+  chart-prefill chart-kv-cache chart-draft-len chart-acceptance findings-list
+  recs-list skipped-list note-decode note-prefill note-kv note-cache-hit`
   appears exactly once as `id="..."`.
 - `test_vendor_script_order`: the index position of chart.umd.js comes
   before app.js.

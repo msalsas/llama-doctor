@@ -16,8 +16,8 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
             return [Finding("decode", "decode.slow", Severity.WARN, "Decode is slow",
                             "This is a symptom of the prefill CPU-bound finding.", evidence)]
         return [Finding("decode", "decode.slow", Severity.WARN, "Decode is slow",
-                        "Decode throughput is below the expected range.", evidence,
+                        f"Decode throughput is below {SLOW_DECODE_TPS:g} tok/s.", evidence,
                         (Recommendation("Offload more layers to the GPU.", "GPU offload improves decode.",
                                         Impact.MEDIUM, "-ngl"),))]
     return [Finding("decode", "decode.ok", Severity.OK, "Decode throughput is healthy",
-                    "Decode throughput is within the expected range.", evidence)]
+                    f"Decode throughput is at or above {SLOW_DECODE_TPS:g} tok/s.", evidence)]

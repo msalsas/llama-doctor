@@ -13,7 +13,7 @@ The live dashboard on an RTX 5080 rig running Unsloth Studio, serving Qwen3.8-Fl
 ## What it does
 
 - Reads `/metrics`, `/props` and `/v1/models` over HTTP. It never attaches to, restarts or reconfigures the server process.
-- Runs 10 analyzers that emit 41 distinct findings across connectivity, memory, cache, context sizing, speculative decoding, quantization and expert offload.
+- Runs 10 analyzers that emit 41 distinct findings across connectivity, prefill and decode throughput, memory, cache, context sizing, request queueing, speculative decoding, quantization and expert offload.
 - Ranks recommendations by impact and names the server flag to change.
 - Returns an exit code per severity, so you can gate CI jobs or cron checks on it.
 - Optionally serves a local dashboard with live charts and findings.
@@ -55,21 +55,27 @@ rates (lifetime averages)
   drafts        len 2.00  acceptance 64.6 %
 
 findings
+  WARN context.near_limit  Context is near its limit
+        The observed peak of tokens in context is close to the configured context size.
   INFO prefill.slow  Prefill is slow
-        Prefill throughput is below the expected range.
+        Prefill throughput is below 300 tok/s.
   OK   connectivity.ok  Endpoints available
   OK   decode.ok  Decode throughput is healthy
   OK   prefix_cache.ok  Prefix cache is effective
   OK   kv.ok  KV cache sizing is healthy
+  OK   queue.ok  No requests queued
   OK   spec.ok  Speculative decoding is healthy
   N/A  memory.insufficient_data  Memory estimate unavailable
         Provide --vram-gib and optionally --ram-gib.
   N/A  props.minimal  Properties are minimal
         Wrapper builds such as unsloth-studio omit required fields.
 recommendations (by impact)
-  1. medium Increase micro-batch size.  [--ubatch-size]
-overall: INFO (exit 0)
+  1. medium Raise the context size or shorten prompts.  [-c]
+  2. medium Increase micro-batch size.  [--ubatch-size]
+overall: WARN (exit 1)
 ```
+
+Findings are sorted by severity, then by the impact of their recommendations. OK findings print without a detail line.
 
 Exit codes: `0` = OK, `1` = WARN, `2` = CRIT (including server unreachable), `3` = invalid usage or arguments.
 
@@ -79,11 +85,22 @@ Exit codes: `0` = OK, `1` = WARN, `2` = CRIT (including server unreachable), `3`
 llama-doctor serve http://127.0.0.1:8080
 ```
 
-`serve` runs a local HTTP server on port 8765; open `http://127.0.0.1:8765` in a browser. It polls the llama.cpp server every 2 s and keeps the last 300 points in memory.
+`serve` runs a local HTTP server on port 8765; open `http://127.0.0.1:8765` in a browser. It polls the llama.cpp server every 2 s and keeps the last 300 points in memory. Chart rates are computed over a sliding 30 s window (`--rate-window`), because llama.cpp counters only move when a request completes.
 
-- Every metric has a help tooltip that says what it measures and how to read it.
-- A Queue tile shows requests being processed and requests deferred while waiting for a free slot (`requests_processing`, `requests_deferred`).
-- A Context tile shows the peak tokens held in context as a share of `n_ctx` (`n_tokens_max / n_ctx`, for example `98.0 %` and `78.5k / 80.1k`). It is the highest point since the server started, not live use. The KV chart plots the same ratio as a dashed line, and `context.near_limit` warns at 90 % or more.
+Tiles, left to right: Decode tok/s, Prefill tok/s, Prefix-cache hit, KV usage, Context, Queue.
+
+- Decode, Prefill and Prefix-cache hit show the latest windowed value, with the lifetime average below it (or only the lifetime average while the server is idle).
+- KV usage is the current share of KV cache cells in use (`kv_cache_usage_ratio`), or `not exported` on servers that omit it. `kv.saturated` warns at 90 % or more.
+- Context shows the peak tokens held in context as a share of `n_ctx` (`n_tokens_max / n_ctx`, for example `98.0 %` and `78.5k / 80.1k`). It is the highest point since the server started, not live use. `context.near_limit` warns at 90 % or more.
+- Queue shows requests being processed and, below it, requests deferred while waiting for a free slot (`requests_processing`, `requests_deferred`).
+
+Charts:
+
+- Decode throughput and Prefill throughput, in tokens per second, averaged over the rate window.
+- KV, prefix cache and context, in percent: KV usage, Prefix-cache hit, and Context used as a dashed line (a peak, not a live gauge).
+- Speculative decoding: Draft length in tokens and Draft acceptance in percent, averaged over the rate window.
+
+Every tile, chart and the quant, context and slots fields in the header have a help tooltip that says what the value measures and how to read it, independent of model or hardware.
 
 ![Dashboard findings](docs/assets/dashboard-findings.png)
 
@@ -113,17 +130,18 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--port` | Port to listen on (default `8765`). |
 | `--interval` | Seconds between polls (default `2.0`). |
 | `--history` | Number of points kept for the charts (default `300`). |
+| `--rate-window SEC` | Seconds over which chart rates and the queue check are computed (default `30.0`). |
 
 `serve` also accepts `--api-key-env` and `--timeout`.
 
 ## Checks
 
-The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache and context sizing, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
+The analyzers cover connectivity, server properties, prefill throughput, decode throughput, prefix cache, KV cache sizing, context window, request queue, speculative decoding, and memory (including quantization and expert offload). The modules in [`src/llama_doctor/analysis/`](src/llama_doctor/analysis/) are the source of truth for each finding and its threshold.
 
-Two findings from the output above:
+Two findings that the server above does not trigger but other setups do:
 
-- `prefix_cache.low_hit_ratio`: only 10.3 % of prompt tokens came from the cache. The fix is to keep the prompt prefix byte-identical across requests and enable `--cache-reuse`.
-- `kv.context_oversized`: the server reserves a 32768-token context, but observed peak use is far lower. Setting `-c 12288` frees KV cache memory.
+- `prefix_cache.low_hit_ratio` (WARN below 20 %): for example, only 10.3 % of prompt tokens came from the cache. The fix is to keep the prompt prefix byte-identical across requests and enable `--cache-reuse`.
+- `kv.context_oversized` (WARN when the peak is under 25 % of a context of 16384 tokens or more): for example, the server reserves a 32768-token context but the peak is 5.5k tokens. The suggested size is twice the peak rounded up to a multiple of 4096, so `-c 12288` frees KV cache memory.
 
 ## Development
 

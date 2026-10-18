@@ -25,9 +25,10 @@ src/llama_doctor/
     signals.py           rate helpers shared by analyzers              (T2)
     engine.py            run_analyzers                                 (T2)
     connectivity.py prefill.py decode.py prefix_cache.py kv.py
-    spec.py memory.py props_check.py                                   (T2)
+    context.py queue.py spec.py memory.py props_check.py               (T2)
     __init__.py          BUILTIN_ANALYZERS, diagnose()                 (T2)
   serialize.py           JSON-safe dicts for reports and snapshots     (T2)
+  catalog.py             metric explanations served at /api/catalog
   probe.py               opt-in live measurement                       (T3)
   render/terminal.py     ANSI report                                   (T3)
   render/jsondoc.py      --json document                               (T3)
@@ -37,7 +38,7 @@ src/llama_doctor/
     server.py            ThreadingHTTPServer, /api/state, static files (T4)
     static/              index.html app.css app.js vendor/chart.umd.js (T5)
 tests/
-  fakeserver.py          in-process fake llama-server for tests        (T1)
+  support.py             load_fixture, FakeLlamaServer, make_context   (T1)
   fixtures/              synthetic /metrics, /props, /v1/models        (T1)
 ```
 
@@ -54,7 +55,7 @@ LlamaClient.snapshot()
   GET /v1/models -> json      -> ModelsMeta.from_payload      (whitelist)
   failures       -> errors[endpoint] = EndpointError
         |
-  ServerSnapshot  (+ ProbeResult | None, + HostHints)  = DiagnosisContext
+  ServerSnapshot  (+ ProbeResult | None, + HostHints, + dashboard window)  = DiagnosisContext
         |
   diagnose(ctx) -> each AnalyzerSpec.func(ctx) -> list[Finding] -> Report
         |
@@ -170,25 +171,34 @@ DNS rebinding. Every response carries
 (`default-src 'self'`, no inline script or style).
 
 - `GET /` -> `index.html`; `GET /static/<name>` -> fixed allowlist only.
+- `GET /api/catalog` -> `catalog.METRICS`: label, description and
+  interpretation per metric id, used by the dashboard tooltips. The texts are
+  model-agnostic: no absolute ranges tied to a model, quant or GPU.
 - `GET /api/state` -> `application/json`, `Cache-Control: no-store`:
 
 ```
-{ "version", "target", "interval_s", "updated_at": float|null,
+{ "version", "target", "interval_s", "rate_window_s", "updated_at": float|null,
   "server":   props_to_dict | null,
-  "lifetime": rates (counter totals),
+  "lifetime": rates (counter totals; kv_usage_ratio and n_tokens_max are current gauges),
   "history":  [ point, ... ]    oldest first, ring buffer (default 300)
+  "context":  { used_ratio, n_tokens_max, n_ctx, label },
   "report":   report_to_dict | null,
   "errors":   { endpoint: reason },
   "notes":    { kv_unexported, cache_hit_unexported, decode_idle, prefill_idle } }
 point = { "t", "decode_tps", "prefill_tps", "cache_hit_ratio",
           "avg_draft_len", "draft_acceptance", "kv_usage_ratio",
-          "requests_processing" }
+          "requests_processing", "requests_deferred", "context_used_ratio" }
 ```
 
-History rates are deltas between consecutive samples. If a counter did not
-move (idle server), the rate is `null` and the chart shows a gap instead of a
-misleading 0. If a counter went backwards (server restart), that point is
-null and the baseline resets.
+History rates are deltas against the newest sample at or before the start of
+the rate window (default 30 s, `--rate-window`), because llama.cpp counters
+only move when a request completes. If a counter did not move (idle server),
+the rate is `null` and the chart shows a gap instead of a misleading 0. If a
+counter went backwards (server restart), the window resets. `kv_usage_ratio`
+and `requests_*` are gauges copied from the current sample;
+`context_used_ratio` is the `n_tokens_max` peak over `n_ctx`, not live use.
+The analyzers also receive the samples inside the window, which `queue` uses
+for the deepest queue seen.
 
 ## Security notes
 

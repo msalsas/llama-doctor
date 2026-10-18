@@ -15,7 +15,7 @@ src/llama_doctor/analysis/__init__.py    BUILTIN_ANALYZERS, diagnose
 src/llama_doctor/analysis/base.py
 src/llama_doctor/analysis/signals.py
 src/llama_doctor/analysis/engine.py
-src/llama_doctor/analysis/{connectivity,prefill,decode,prefix_cache,kv,spec,memory,props_check}.py
+src/llama_doctor/analysis/{connectivity,prefill,decode,prefix_cache,kv,context,queue,spec,memory,props_check}.py
 src/llama_doctor/serialize.py
 tests/test_signals.py  tests/test_analyzers.py  tests/test_engine.py  tests/test_serialize.py
 ```
@@ -40,6 +40,7 @@ class HostHints: vram_gib: float | None = None; ram_gib: float | None = None
 @dataclass(frozen=True)
 class DiagnosisContext:
     snapshot: ServerSnapshot; probe: ProbeResult | None = None; hints: HostHints = HostHints()
+    window: tuple[MetricsSnapshot, ...] = ()   # dashboard rate window, current last; empty one-shot
     metrics / props / models  # @property shortcuts to snapshot fields
 AnalyzerFunc = Callable[[DiagnosisContext], list[Finding]]
 @dataclass(frozen=True)

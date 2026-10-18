@@ -107,9 +107,10 @@ def main(argv: Sequence[str] | None = None) -> int
 - `diagnose URL [--json] [--api-key-env VAR] [--timeout SEC (5.0)] [--probe]
   [--vram-gib N] [--ram-gib N] [--no-color]`
 - `serve URL [--host 127.0.0.1] [--port 8765] [--interval 2.0] [--history 300]
-  [--api-key-env VAR] [--timeout SEC]`. Its handler builds the client and
-  calls `llama_doctor.dashboard.server.run(client, host=..., port=...,
-  interval=..., history=..., out=sys.stderr) -> int`, imported inside the
+  [--rate-window SEC (30.0, must be > 0)] [--api-key-env VAR] [--timeout SEC]`.
+  Its handler builds the client and calls
+  `llama_doctor.dashboard.server.run(client, host=..., port=..., interval=...,
+  history=..., rate_window=..., out=sys.stderr) -> int`, imported inside the
   handler. T4 implements `run`; this task only wires the parser and the
   lazy call.
 - There is no flag that takes a key value directly. `--api-key-env VAR`

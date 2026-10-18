@@ -42,8 +42,8 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
                         "Prefill throughput indicates CPU work.", evidence, recommendations)]
     if rate.value < SLOW_PREFILL_TPS:
         return [Finding("prefill", "prefill.slow", Severity.INFO, "Prefill is slow",
-                        "Prefill throughput is below the expected range.", evidence,
+                        f"Prefill throughput is below {SLOW_PREFILL_TPS:g} tok/s.", evidence,
                         (Recommendation("Increase micro-batch size.", "Larger batches may improve prefill.",
                                         Impact.MEDIUM, "--ubatch-size"),))]
     return [Finding("prefill", "prefill.ok", Severity.OK, "Prefill throughput is healthy",
-                    "Prefill throughput is within the expected range.", evidence)]
+                    f"Prefill throughput is at or above {SLOW_PREFILL_TPS:g} tok/s.", evidence)]

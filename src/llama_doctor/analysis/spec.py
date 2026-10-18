@@ -1,6 +1,10 @@
 from .base import DiagnosisContext, Finding, Impact, Recommendation, Severity
 from .signals import is_cpu_bound
 
+LOW_ACCEPTANCE = 0.4
+OFFLOADED_MAX_DRAFT_LEN = 2.0
+RAISE_DRAFT_ACCEPTANCE = 0.7
+RAISE_DRAFT_MAX_LEN = 3.0
 
 def analyze(ctx: DiagnosisContext) -> list[Finding]:
     metrics = ctx.metrics
@@ -16,18 +20,22 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
         return [Finding("spec", "spec.insufficient_data", Severity.INSUFFICIENT_DATA,
                         "Speculative decoding data unavailable", "Draft acceptance metrics are incomplete.")]
     evidence = {"avg_draft_len": average, "acceptance": acceptance}
-    if acceptance < 0.4:
+    if acceptance < LOW_ACCEPTANCE:
         return [Finding("spec", "spec.low_acceptance", Severity.WARN, "Draft acceptance is low",
                         "Most proposed draft tokens are rejected.", evidence,
                         (Recommendation("Reduce maximum draft length.", "Shorter drafts reduce rejected work.",
                                         Impact.MEDIUM, "--draft-max"),))]
-    if is_cpu_bound(ctx) is True and average > 2.0:
+    if is_cpu_bound(ctx) is True and average > OFFLOADED_MAX_DRAFT_LEN:
         return [Finding("spec", "spec.drafts_too_long_offloaded", Severity.WARN,
                         "Drafts are too long for CPU-offloaded work",
                         "CPU-bound inference benefits from shorter speculative drafts.", evidence,
                         (Recommendation("Set maximum draft length to 2.", "Short drafts limit CPU expert work.",
                                         Impact.MEDIUM, "--draft-max"),))]
-    if is_cpu_bound(ctx) is not True and acceptance >= 0.7 and average < 3.0:
+    if (
+        is_cpu_bound(ctx) is not True
+        and acceptance >= RAISE_DRAFT_ACCEPTANCE
+        and average < RAISE_DRAFT_MAX_LEN
+    ):
         return [Finding("spec", "spec.raise_draft", Severity.INFO, "Draft length can increase",
                         "High acceptance suggests longer drafts may help.", evidence,
                         (Recommendation("Increase maximum draft length.", "High acceptance supports longer drafts.",

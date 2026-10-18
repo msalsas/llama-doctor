@@ -24,12 +24,16 @@ tests/test_sampler.py  tests/test_server.py
 ```python
 DEFAULT_INTERVAL = 2.0
 DEFAULT_HISTORY = 300
+DEFAULT_RATE_WINDOW = 30.0
 POINT_KEYS = ("t", "decode_tps", "prefill_tps", "cache_hit_ratio", "avg_draft_len",
-              "draft_acceptance", "kv_usage_ratio", "requests_processing")
-def delta_point(prev: MetricsSnapshot | None, cur: MetricsSnapshot, t: float) -> dict[str, float | None]
+              "draft_acceptance", "kv_usage_ratio", "requests_processing",
+              "requests_deferred", "context_used_ratio")
+def delta_point(prev: MetricsSnapshot | None, cur: MetricsSnapshot, t: float,
+                n_ctx: int | None = None) -> dict[str, float | None]
 class Sampler:
     def __init__(self, fetch: Callable[[], ServerSnapshot], *, target: str,
                  interval: float = DEFAULT_INTERVAL, history: int = DEFAULT_HISTORY,
+                 rate_window: float = DEFAULT_RATE_WINDOW,
                  analyzers: Sequence[AnalyzerSpec] = BUILTIN_ANALYZERS) -> None
     def tick(self) -> None
     def state(self) -> dict[str, Any]
@@ -44,21 +48,26 @@ class Sampler:
   prefill = prompt_tokens / prompt_seconds; decode = tokens_predicted /
   tokens_predicted_seconds; cache_hit_ratio = d_cached / (d_cached +
   d_prompt_tokens); avg_draft_len = d_draft_tokens / d_drafts;
-  draft_acceptance = d_accepted / d_draft_tokens. `kv_usage_ratio` and
-  `requests_processing` are gauges copied from `cur`. The keys are exactly
-  `POINT_KEYS`.
-- `tick()` calls `fetch()`, then `diagnose(DiagnosisContext(snapshot), analyzers)`.
-  If the snapshot has metrics, it appends `delta_point(prev_metrics,
-  metrics, snapshot.taken_at)` to a `deque(maxlen=history)` and sets
-  `prev_metrics = metrics`. Missing metrics leave the baseline unchanged, so
-  the next delta spans the gap. Any exception from `fetch` or `diagnose` is
+  draft_acceptance = d_accepted / d_draft_tokens. `kv_usage_ratio`,
+  `requests_processing` and `requests_deferred` are gauges copied from `cur`;
+  `context_used_ratio` is `cur.n_tokens_max / n_ctx` (a peak, not live use).
+  The keys are exactly `POINT_KEYS`.
+- `tick()` calls `fetch()` and records the metrics in a buffer of recent
+  samples. The rate baseline is the newest sample at or before
+  `taken_at - rate_window` (else the oldest one), because llama.cpp counters
+  only move when a request completes; a counter that goes backwards clears
+  the buffer. It then runs `diagnose(DiagnosisContext(snapshot,
+  window=<samples inside the window>), analyzers)` and, if the snapshot has
+  metrics, appends `delta_point(baseline, metrics, snapshot.taken_at, n_ctx)`
+  to a `deque(maxlen=history)`. Any exception from `fetch` or `diagnose` is
   caught and stored as `errors = {"sampler": type(exc).__name__}`, and the
   thread keeps running. All shared state sits behind one `threading.Lock`.
 - `state()` returns a new JSON-ready dict with exactly these keys:
   `version` (`llama_doctor.__version__`), `target`, `interval_s`,
-  `updated_at` (taken_at of the last successful tick, else None), `server`
-  (`props_to_dict`), `lifetime` (`rates_to_dict` of the latest metrics),
-  `history` (list, oldest first), `report` (`report_to_dict` or None),
+  `rate_window_s`, `updated_at` (taken_at of the last successful tick, else
+  None), `server` (`props_to_dict`), `lifetime` (`rates_to_dict` of the latest
+  metrics), `history` (list, oldest first), `context` (`context_to_dict`:
+  `used_ratio`, `n_tokens_max`, `n_ctx`, `label`), `report` (`report_to_dict` or None),
   `errors` (`errors_to_dict`, or the sampler error dict), and `notes`
   (booleans for chart notes). `kv_unexported` / `cache_hit_unexported`:
   the latest metrics lack `kv_cache_usage_ratio` /
@@ -82,7 +91,7 @@ def default_static_dir() -> Traversable    # importlib.resources.files("llama_do
 def make_server(state: Callable[[], dict[str, Any]], *, host: str = "127.0.0.1",
                 port: int = 8765, static_dir: Traversable | Path | None = None) -> ThreadingHTTPServer
 def run(client: LlamaClient, *, host: str, port: int, interval: float, history: int,
-        out: TextIO) -> int
+        out: TextIO, rate_window: float = DEFAULT_RATE_WINDOW) -> int
 ```
 Handler rules (a `BaseHTTPRequestHandler` subclass built in `make_server`):
 - Only GET and HEAD. Anything else gets 405 with `Allow: GET, HEAD`.
@@ -95,6 +104,8 @@ Handler rules (a `BaseHTTPRequestHandler` subclass built in `make_server`):
   application/json; charset=utf-8`, and `Cache-Control: no-store`. If
   `state()` raises, the response is 500 with body `internal error`, with no
   exception text.
+- `/api/catalog` returns 200 with `json.dumps(catalog.METRICS)` (encoded once
+  at startup) and `Content-Type: application/json; charset=utf-8`.
 - Static files come only from `STATIC_ROUTES`. No other path ever reads the
   filesystem, and any other path, or a missing file, gets 404. Content
   types: `.html` text/html, `.css` text/css, and `.js` text/javascript, all

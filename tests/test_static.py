@@ -119,6 +119,10 @@ class TestStaticFiles(unittest.TestCase):
         self.assertIn('"not exported"', self.app_js)
         self.assertIn("notes.kv_unexported === true", self.app_js)
 
+    def test_kv_tile_is_a_gauge_without_lifetime_average(self):
+        self.assertIn('percent(latest(history, "kv_usage_ratio"))', self.app_js)
+        self.assertNotIn("lifetime.kv_usage_ratio", self.app_js)
+
     def test_metric_notes_start_hidden_and_are_styled(self):
         for note in ("note-decode", "note-prefill", "note-kv", "note-cache-hit"):
             with self.subTest(note=note):

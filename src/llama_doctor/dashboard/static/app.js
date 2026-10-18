@@ -199,15 +199,22 @@
     return body;
   }
 
-  function renderTile(id, live, lifetime, formatter, unexported = false) {
+  function renderTile(id, live, lifetime, formatter) {
     const body = tileValue(id);
+    const hero = live === null ? lifetime : live;
+    append(body, "div", formatter(hero), "hero");
+    append(body, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
+  }
+
+  // KV usage is an instantaneous gauge with no lifetime average, so it gets no lifetime line.
+  function renderKvTile(history, unexported) {
+    const body = tileValue("tile-kv");
     if (unexported) {
       append(body, "div", "not exported", "hero");
       return;
     }
-    const hero = live === null ? lifetime : live;
-    append(body, "div", formatter(hero), "hero");
-    append(body, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
+    append(body, "div", percent(latest(history, "kv_usage_ratio")), "hero");
+    append(body, "div", "current", "secondary");
   }
 
   function renderQueueTile(history) {
@@ -230,8 +237,7 @@
     renderTile("tile-decode", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
     renderTile("tile-prefill", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
     renderTile("tile-cache", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
-    renderTile("tile-kv", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent,
-      notes.kv_unexported === true);
+    renderKvTile(history, notes.kv_unexported === true);
     renderContextTile(state);
     renderQueueTile(history);
   }
@@ -251,7 +257,8 @@
     "chart-draft-len": ["draft_length"],
     "chart-acceptance": ["acceptance"],
     "hdr-quant": ["quant"],
-    "hdr-ctx": ["context_tokens"]
+    "hdr-ctx": ["context_tokens"],
+    "hdr-slots": ["slots"]
   };
   // Tiles show a single info button; when one covers several entries each section gets this prefix.
   const INFO_PREFIX = {

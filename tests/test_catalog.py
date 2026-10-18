@@ -15,6 +15,7 @@ REQUIRED_IDS = {
     "queue_deferred",
     "quant",
     "context_tokens",
+    "slots",
     "context_used",
 }
 

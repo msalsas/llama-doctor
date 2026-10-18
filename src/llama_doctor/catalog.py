@@ -20,8 +20,8 @@ METRICS: dict[str, dict[str, str]] = {
         "interpretation": (
             "Higher means a shorter wait before the first token. Prefill is batched, so "
             "it normally runs several times faster than decode on the same server; when "
-            "it is barely above decode, prompt processing is compute-starved, typically "
-            "by CPU offload or a small -ub."
+            "it is under twice decode, prompt processing is CPU-bound, typically because "
+            "layers or MoE experts run from system RAM."
         ),
     },
     "prefix_cache_hit": {
@@ -37,10 +37,11 @@ METRICS: dict[str, dict[str, str]] = {
         "label": "KV usage",
         "description": "Fraction of KV cache cells currently holding context tokens.",
         "interpretation": (
-            "It is a share of the cache's own capacity: sustained near 100 % risks "
-            "truncation or deferred requests, while a peak that stays far below it means "
-            "the context is oversized and wastes memory. Some servers, such as Unsloth "
-            "Studio, do not export it."
+            "It is a share of the cache's own capacity and moves with each request: at "
+            "90 % or more the cache is saturated, which risks truncation or deferred "
+            "requests. Whether the context is oversized is judged from the Context used "
+            "peak, not from this gauge. Some servers, such as Unsloth Studio, do not "
+            "export it."
         ),
     },
     "draft_length": {
@@ -96,6 +97,15 @@ METRICS: dict[str, dict[str, str]] = {
             "model's maximum."
         ),
     },
+    "slots": {
+        "label": "Slots",
+        "description": "Requests the server can process at once (total_slots, set by --parallel).",
+        "interpretation": (
+            "Requests processing pinned at this count means new requests wait in the queue; "
+            "each extra slot needs its own share of KV cache, so raise it only while KV "
+            "usage leaves room."
+        ),
+    },
     "context_used": {
         "label": "Context used",
         "description": (
@@ -104,7 +114,8 @@ METRICS: dict[str, dict[str, str]] = {
         ),
         "interpretation": (
             "At 90 % or more the longest conversation nearly hit the window, so raise -c or trim "
-            "prompts; under 25 % the window is oversized. The peak only resets when llama-server "
+            "prompts; under 25 % of a window of 16384 tokens or more, the window is oversized and "
+            "-c can shrink to about twice the peak. The peak only resets when llama-server "
             "restarts, and builds such as Unsloth export only n_tokens_max, so live per-request use "
             "is not visible."
         ),
