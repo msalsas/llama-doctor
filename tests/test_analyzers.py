@@ -238,15 +238,60 @@ class TestAnalyzers(unittest.TestCase):
         finding = findings(replace(make_context(), hints=HostHints(8, 32)), "memory")[0]
         self.assertEqual((finding.code, finding.severity), ("memory.partial_offload", Severity.INFO))
         self.assertAlmostEqual(finding.evidence["offloaded_gib"], 8.5, places=6)
+        self.assertEqual(finding.evidence["weights_source"], "server")
 
     def test_memory_exceeds_total(self):
         finding = findings(replace(make_context(), hints=HostHints(8, 4)), "memory")[0]
-        self.assert_finding(finding, "memory.exceeds_total", Severity.CRITICAL, {})
+        self.assert_finding(finding, "memory.exceeds_total", Severity.CRITICAL, {"weights_source": "server"})
         self.assertEqual(finding.recommendations[0].impact, 3)
 
     def test_memory_fits(self):
         self.assert_finding(findings(replace(make_context(), hints=HostHints(24)), "memory")[0],
-                            "memory.fits_vram", Severity.OK, {})
+                            "memory.fits_vram", Severity.OK, {"weights_source": "server"})
+
+    def test_memory_server_size_wins_over_weights_hint(self):
+        finding = findings(replace(make_context(), hints=HostHints(8, 32, weights_gib=4)), "memory")[0]
+        self.assertEqual(finding.code, "memory.partial_offload")
+        self.assertAlmostEqual(finding.evidence["offloaded_gib"], 8.5, places=6)
+        self.assertEqual(finding.evidence["weights_source"], "server")
+        self.assertNotIn("--weights-gib", finding.detail)
+
+    def test_memory_uses_weights_hint_without_server_size(self):
+        context = make_context(models=None)
+        cases = (
+            (HostHints(24, weights_gib=16.5), "memory.fits_vram", {"weights_source": "hint"}),
+            (HostHints(8, 32, weights_gib=16.5), "memory.partial_offload",
+             {"offloaded_gib": 8.5, "weights_source": "hint"}),
+            (HostHints(8, 4, weights_gib=16.5), "memory.exceeds_total", {"weights_source": "hint"}),
+            (HostHints(8, weights_gib=16.5), "memory.partial_offload",
+             {"offloaded_gib": 8.5, "weights_source": "hint"}),
+        )
+        for hints, code, evidence in cases:
+            with self.subTest(hints=hints):
+                finding = findings(replace(context, hints=hints), "memory")[0]
+                self.assertEqual(finding.code, code)
+                self.assertEqual(dict(finding.evidence), evidence)
+                self.assertIn("--weights-gib", finding.detail)
+
+    def test_memory_insufficient_when_weights_or_vram_missing(self):
+        cases = (
+            (make_context(models=None), HostHints(24), "--weights-gib"),
+            (make_context(models=None), HostHints(ram_gib=32), "--weights-gib"),
+            (make_context(models=None), HostHints(weights_gib=16.5), "--vram-gib"),
+            (make_context(), HostHints(weights_gib=16.5), "--vram-gib"),
+        )
+        for context, hints, flag in cases:
+            with self.subTest(hints=hints):
+                finding = findings(replace(context, hints=hints), "memory")[0]
+                self.assert_finding(finding, "memory.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+                self.assertIn(flag, finding.detail)
+
+    def test_memory_rejects_invalid_weights_hint(self):
+        for weights in (0, -1, math.nan, math.inf):
+            with self.subTest(weights=weights):
+                hints = HostHints(24, weights_gib=weights)
+                self.assertEqual(findings(replace(make_context(models=None), hints=hints), "memory")[0].code,
+                                 "memory.insufficient_data")
 
     def test_memory_insufficient_without_hints(self):
         self.assert_finding(findings(make_context(), "memory")[0], "memory.insufficient_data",

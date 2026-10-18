@@ -62,6 +62,12 @@ class TestReadme(unittest.TestCase):
         serve = self.readme.split("`llama-doctor serve URL`", 1)[1].split("\n## ", 1)[0]
         self.assertIn("`--vram-gib N`", serve)
 
+    def test_diagnose_and_serve_document_weights_gib(self):
+        reference = self.readme.split("`llama-doctor diagnose URL`", 1)[1]
+        diagnose, serve = reference.split("`llama-doctor serve URL`", 1)
+        self.assertIn("`--weights-gib N`", diagnose)
+        self.assertIn("`--weights-gib N`", serve.split("\n## ", 1)[0])
+
     def test_linked_repo_paths_exist(self):
         paths = re.findall(r"\]\(((?:docs|src)/[^)#]+|LICENSE)\)", self.readme)
         self.assertTrue(paths)

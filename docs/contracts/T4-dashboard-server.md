@@ -59,7 +59,7 @@ class Sampler:
   only move when a request completes; a counter that goes backwards clears
   the buffer. It then runs `diagnose(DiagnosisContext(snapshot, hints=hints,
   window=<samples inside the window>), analyzers)` (so `serve --vram-gib`
-  reaches the memory analyzer) and, if the snapshot has
+  and `--weights-gib` reach the memory analyzer) and, if the snapshot has
   metrics, appends `delta_point(baseline, metrics, snapshot.taken_at, n_ctx)`
   to a `deque(maxlen=history)`. Any exception from `fetch` or `diagnose` is
   caught and stored as `errors = {"sampler": type(exc).__name__}`, and the

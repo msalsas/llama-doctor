@@ -70,6 +70,25 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(run.call_args.kwargs["hints"], HostHints(vram_gib=24.0))
 
+    def test_serve_passes_weights_gib_to_dashboard(self):
+        with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
+            self._run(["serve", "http://127.0.0.1:1", "--vram-gib", "24", "--weights-gib", "16.5"])
+
+        self.assertEqual(run.call_args.kwargs["hints"], HostHints(vram_gib=24.0, weights_gib=16.5))
+
+    def test_diagnose_uses_weights_gib_when_server_omits_size(self):
+        models = json.dumps({"data": [{"id": "m"}]})
+        with FakeLlamaServer() as server:
+            _set_routes(server, metrics="metrics_healthy.txt")
+            server.set_route("/v1/models", 200, models, "application/json")
+            _, stdout, _ = self._run(
+                ["diagnose", server.url, "--json", "--vram-gib", "24", "--weights-gib", "16.5"]
+            )
+
+        memory = [item for item in json.loads(stdout)["findings"] if item["analyzer"] == "memory"]
+        self.assertEqual([item["code"] for item in memory], ["memory.fits_vram"])
+        self.assertEqual(memory[0]["evidence"], {"weights_source": "hint"})
+
     def test_serve_without_vram_gib_passes_empty_hints(self):
         with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
             self._run(["serve", "http://127.0.0.1:1"])

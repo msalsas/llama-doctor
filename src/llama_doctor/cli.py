@@ -43,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose_parser.add_argument("--probe", action="store_true")
     diagnose_parser.add_argument("--vram-gib", type=float, metavar="N")
     diagnose_parser.add_argument("--ram-gib", type=float, metavar="N")
+    diagnose_parser.add_argument("--weights-gib", type=float, metavar="N")
     diagnose_parser.add_argument("--no-color", action="store_true")
 
     serve_parser = commands.add_parser("serve")
@@ -55,6 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--api-key-env", metavar="VAR")
     serve_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     serve_parser.add_argument("--vram-gib", type=float, metavar="N")
+    serve_parser.add_argument("--weights-gib", type=float, metavar="N")
     return parser
 
 
@@ -91,7 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             interval=args.interval,
             history=args.history,
             rate_window=args.rate_window,
-            hints=HostHints(vram_gib=args.vram_gib),
+            hints=HostHints(vram_gib=args.vram_gib, weights_gib=args.weights_gib),
             out=sys.stderr,
         )
 
@@ -105,7 +107,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     context = DiagnosisContext(
         snapshot,
         probe,
-        HostHints(vram_gib=args.vram_gib, ram_gib=args.ram_gib),
+        HostHints(vram_gib=args.vram_gib, ram_gib=args.ram_gib, weights_gib=args.weights_gib),
     )
     report = diagnose(context)
     if args.json:

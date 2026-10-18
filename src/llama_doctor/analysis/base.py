@@ -55,6 +55,7 @@ class Finding:
 class HostHints:
     vram_gib: float | None = None
     ram_gib: float | None = None
+    weights_gib: float | None = None
 
 
 @dataclass(frozen=True)
