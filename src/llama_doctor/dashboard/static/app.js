@@ -382,11 +382,25 @@
     slots_unavailable: "note-slots",
   };
 
+  const SLOTS_NOTE_FALLBACK = "Live slot data unavailable; context use is estimated from metrics";
+  const SLOTS_NOTE_ESTIMATED = "KV usage is estimated from /slots";
+
+  // With live slots the estimate comes from /slots; without them the old wording applies.
+  function updateSlotsNote(state, notes) {
+    const note = byId("note-slots");
+    const kv = state.kv && typeof state.kv === "object" ? state.kv : null;
+    const fromSlots = notes.slots_unavailable !== true && notes.kv_unexported === true
+      && kv !== null && kv.estimated === true;
+    note.textContent = fromSlots ? SLOTS_NOTE_ESTIMATED : SLOTS_NOTE_FALLBACK;
+    note.classList.toggle("hidden", !(fromSlots || notes.slots_unavailable === true));
+  }
+
   function updateNotes(state) {
     const notes = state.notes && typeof state.notes === "object" ? state.notes : {};
     Object.entries(NOTE_IDS).forEach(([flag, id]) => {
       byId(id).classList.toggle("hidden", notes[flag] !== true);
     });
+    updateSlotsNote(state, notes);
   }
 
   function updateRateWindow(state) {

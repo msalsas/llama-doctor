@@ -147,6 +147,13 @@ class TestStaticFiles(unittest.TestCase):
         self.assertLess(self.index.index('id="note-cache-hit"'), self.index.index('id="note-slots"'))
         self.assertLess(self.index.index('id="note-slots"'), self.index.index('data-table="kv-cache"'))
 
+    def test_slots_note_text_depends_on_slot_availability(self):
+        self.assertIn("Live slot data unavailable; context use is estimated from metrics", self.app_js)
+        self.assertIn("KV usage is estimated from /slots", self.app_js)
+        self.assertIn("notes.slots_unavailable !== true", self.app_js)
+        self.assertIn("kv.estimated === true", self.app_js)
+        self.assertIn("updateSlotsNote(state, notes)", self.app_js)
+
     def test_css_severity_classes(self):
         for severity in ("critical", "warn", "info", "ok", "insufficient_data"):
             self.assertIn(f".sev-{severity}", self.app_css)
