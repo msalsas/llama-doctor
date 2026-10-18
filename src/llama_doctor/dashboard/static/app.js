@@ -166,27 +166,157 @@
     return null;
   }
 
-  function renderTile(id, label, live, lifetime, formatter, unexported = false) {
+  function count(value) {
+    const valueNumber = number(value);
+    return valueNumber === null ? "n/a" : String(Math.round(valueNumber));
+  }
+
+  // Labels are built once so the info buttons inside them keep focus across renders.
+  const TILE_LABELS = {
+    "tile-decode": "Decode tok/s",
+    "tile-prefill": "Prefill tok/s",
+    "tile-cache": "Prefix-cache hit",
+    "tile-kv": "KV usage",
+    "tile-queue": "Queue"
+  };
+
+  Object.entries(TILE_LABELS).forEach(([id, label]) => {
     const tile = byId(id);
-    tile.replaceChildren();
-    append(tile, "div", label, "tile-label");
+    append(append(tile, "div", "", "tile-label"), "span", label);
+    append(tile, "div", "", "tile-value");
+  });
+
+  function tileValue(id) {
+    const body = byId(id).querySelector(".tile-value");
+    body.replaceChildren();
+    return body;
+  }
+
+  function renderTile(id, live, lifetime, formatter, unexported = false) {
+    const body = tileValue(id);
     if (unexported) {
-      append(tile, "div", "not exported", "hero");
+      append(body, "div", "not exported", "hero");
       return;
     }
     const hero = live === null ? lifetime : live;
-    append(tile, "div", formatter(hero), "hero");
-    append(tile, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
+    append(body, "div", formatter(hero), "hero");
+    append(body, "div", live === null ? "lifetime avg" : `lifetime ${formatter(lifetime)}`, "secondary");
+  }
+
+  function renderQueueTile(history) {
+    const body = tileValue("tile-queue");
+    append(body, "div", count(latest(history, "requests_processing")), "hero");
+    append(body, "div", `${count(latest(history, "requests_deferred"))} waiting`, "secondary");
   }
 
   function updateTiles(state, history) {
     const lifetime = state.lifetime && typeof state.lifetime === "object" ? state.lifetime : {};
     const notes = state.notes && typeof state.notes === "object" ? state.notes : {};
-    renderTile("tile-decode", "Decode tok/s", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
-    renderTile("tile-prefill", "Prefill tok/s", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
-    renderTile("tile-cache", "Prefix-cache hit", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
-    renderTile("tile-kv", "KV usage", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent,
+    renderTile("tile-decode", latest(history, "decode_tps"), number(lifetime.decode_tps), rate);
+    renderTile("tile-prefill", latest(history, "prefill_tps"), number(lifetime.prefill_tps), rate);
+    renderTile("tile-cache", latest(history, "cache_hit_ratio"), number(lifetime.cache_hit_ratio), percent);
+    renderTile("tile-kv", latest(history, "kv_usage_ratio"), number(lifetime.kv_usage_ratio), percent,
       notes.kv_unexported === true);
+    renderQueueTile(history);
+  }
+
+  // Which catalog entries explain each tile, chart header and model-strip field.
+  // The tooltip text itself always comes from /api/catalog.
+  const METRIC_INFO = {
+    "tile-decode": ["decode_tps"],
+    "tile-prefill": ["prefill_tps"],
+    "tile-cache": ["prefix_cache_hit"],
+    "tile-kv": ["kv_usage"],
+    "tile-queue": ["queue_processing", "queue_deferred"],
+    "chart-decode": ["decode_tps"],
+    "chart-prefill": ["prefill_tps"],
+    "chart-kv-cache": ["kv_usage", "prefix_cache_hit"],
+    "chart-draft-len": ["draft_length"],
+    "chart-acceptance": ["acceptance"],
+    "hdr-quant": ["quant"],
+    "hdr-ctx": ["context_tokens"]
+  };
+  let infoCount = 0;
+  let catalogLoaded = false;
+  let catalogPending = false;
+
+  function infoHost(element) {
+    if (element.classList.contains("tile")) {
+      return element.querySelector(".tile-label");
+    }
+    if (element.tagName === "CANVAS") {
+      return element.closest(".panel").querySelector("h2");
+    }
+    return element.previousElementSibling;
+  }
+
+  function infoButton(host, metricId, entry) {
+    if (host.querySelector(`[data-metric="${metricId}"]`)) {
+      return;
+    }
+    infoCount += 1;
+    const tipId = `info-tip-${infoCount}`;
+    const wrap = document.createElement("span");
+    wrap.className = "info-wrap";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "info";
+    button.dataset.metric = metricId;
+    button.textContent = "i";
+    button.setAttribute("aria-label", `About ${text(entry.label, metricId)}`);
+    button.setAttribute("aria-describedby", tipId);
+    const tip = document.createElement("span");
+    tip.id = tipId;
+    tip.className = "chart-note info-tip";
+    tip.setAttribute("role", "tooltip");
+    append(tip, "span", text(entry.description, ""));
+    append(tip, "span", text(entry.interpretation, ""));
+    // Escape hides the tooltip without moving focus or the pointer.
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        wrap.classList.add("dismissed");
+      }
+    });
+    ["blur", "mouseleave"].forEach((name) => wrap.addEventListener(name, () => wrap.classList.remove("dismissed"), true));
+    wrap.append(button, tip);
+    host.append(wrap);
+  }
+
+  function attachInfo(catalog) {
+    if (!catalog || typeof catalog !== "object") {
+      throw new Error("invalid catalog");
+    }
+    Object.entries(METRIC_INFO).forEach(([elementId, metricIds]) => {
+      const host = infoHost(byId(elementId));
+      metricIds.forEach((metricId) => {
+        const entry = catalog[metricId];
+        if (entry && typeof entry === "object") {
+          infoButton(host, metricId, entry);
+        }
+      });
+    });
+  }
+
+  function loadCatalog() {
+    if (catalogLoaded || catalogPending) {
+      return;
+    }
+    catalogPending = true;
+    fetch("/api/catalog")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("catalog request failed");
+        }
+        return response.json();
+      })
+      .then((catalog) => {
+        attachInfo(catalog);
+        catalogLoaded = true;
+      })
+      .catch(() => {})
+      .finally(() => {
+        catalogPending = false;
+      });
   }
 
   // The sampler decides which notes apply; the note text lives in index.html.
@@ -379,6 +509,8 @@
         } catch (error) {
           console.error("dashboard render failed", error);
         }
+        // Retried on every successful poll until it loads once.
+        loadCatalog();
         setTimeout(poll, retryDelay);
       })
       .catch(() => {

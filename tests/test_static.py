@@ -59,6 +59,7 @@ class TestStaticFiles(unittest.TestCase):
             "tile-prefill",
             "tile-cache",
             "tile-kv",
+            "tile-queue",
             "chart-decode",
             "chart-prefill",
             "chart-kv-cache",
@@ -166,6 +167,33 @@ class TestStaticFiles(unittest.TestCase):
         )
         for token in tokens:
             self.assertRegex(self.app_css, rf"{re.escape(token)}\s*:")
+
+    def test_queue_tile_follows_kv_tile(self):
+        self.assertLess(self.index.index('id="tile-kv"'), self.index.index('id="tile-queue"'))
+        self.assertIn('"Queue"', self.app_js)
+        self.assertIn('"requests_processing"', self.app_js)
+        self.assertIn('"requests_deferred"', self.app_js)
+
+    def test_queue_tile_secondary_shows_only_waiting_count(self):
+        self.assertIn('`${count(latest(history, "requests_deferred"))} waiting`', self.app_js)
+        self.assertNotIn("processing, ", self.app_js)
+
+    def test_info_tooltips_text_comes_from_catalog_endpoint(self):
+        self.assertIn('fetch("/api/catalog"', self.app_js)
+        self.assertIn('setAttribute("aria-describedby"', self.app_js)
+        self.assertIn('setAttribute("role", "tooltip")', self.app_js)
+        self.assertIn("entry.description", self.app_js)
+        self.assertIn("entry.interpretation", self.app_js)
+
+    def test_info_button_is_a_real_button(self):
+        self.assertIn('document.createElement("button")', self.app_js)
+        self.assertIn('button.type = "button"', self.app_js)
+
+    def test_info_tooltip_opens_on_hover_and_focus_in_pure_css(self):
+        self.assertRegex(self.app_css, r"\.info:hover \+ \.info-tip")
+        self.assertRegex(self.app_css, r"\.info:focus-visible \+ \.info-tip")
+        self.assertRegex(self.app_css, r"\.info-tip:hover")
+        self.assertIn('"chart-note info-tip"', self.app_js)
 
     def test_vendor_is_chartjs_v4_umd(self):
         vendor = (self.root / "vendor/chart.umd.js").read_bytes()

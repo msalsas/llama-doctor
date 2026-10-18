@@ -116,7 +116,7 @@ and so is the order within a list.
   with one rec LOW None. Otherwise OK `prefix_cache.ok`. Evidence:
   `hit_ratio`.
 - **kv**: if metrics is None, INSUFFICIENT `kv.insufficient_data`. Rule A:
-  `kv_cache_usage_ratio >= 0.9` or `requests_deferred > 0` gives WARN
+  `kv_cache_usage_ratio >= 0.9` or `deferred_peak > 0` gives WARN
   `kv.saturated` (rec MEDIUM `--parallel`). Rule B needs `n_tokens_max` and
   `props.n_ctx`, with `n_ctx >= 16384` and `n_tokens_max / n_ctx < 0.25`. It
   gives WARN `kv.context_oversized` with evidence `peak_ratio`, `n_ctx`,
@@ -125,6 +125,13 @@ and so is the order within a list.
   Its rec, flag `-c`, names the suggested value; impact is HIGH when
   cpu-bound is True and MEDIUM otherwise. With no findings, return OK
   `kv.ok` if rule B was evaluable, else INSUFFICIENT `kv.insufficient_data`.
+- **queue**: `requests_processing` and `requests_deferred` are instantaneous
+  gauges, never deltas. `deferred_peak` is the max of `requests_deferred` over
+  `ctx.window` (dashboard rate window, current sample last), or the current
+  value when the window is empty (one-shot diagnose). Missing metrics or gauge
+  gives INSUFFICIENT `queue.insufficient_data`; `deferred_peak > 0` gives INFO
+  `queue.deferred` with evidence `deferred_peak`, `requests_deferred`,
+  `requests_processing`, plus `window_s` when windowed; otherwise OK `queue.ok`.
 - **spec**: if draft_tokens_total or drafts_total is None, INSUFFICIENT
   `spec.insufficient_data`. If drafts_total == 0, INFO `spec.inactive`. If
   acceptance is None, INSUFFICIENT. Then the first matching rule wins:

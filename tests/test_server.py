@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from llama_doctor.catalog import METRICS
 from llama_doctor.cli import main
 from llama_doctor.dashboard.server import CSP, is_loopback, make_server, run
 
@@ -68,6 +69,16 @@ class TestServer(unittest.TestCase):
         self.assertEqual(json.loads(body), self.state)
         self.assertEqual(headers["Content-Type"], "application/json; charset=utf-8")
         self.assertEqual(headers["Cache-Control"], "no-store")
+
+    def test_api_catalog_json(self):
+        status, headers, body = self._request("GET", "/api/catalog")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), METRICS)
+        self.assertEqual(headers["Content-Type"], "application/json; charset=utf-8")
+
+    def test_api_catalog_rejects_foreign_host(self):
+        self.assertEqual(self._request("GET", "/api/catalog", {"Host": "evil.example"})[0], 403)
 
     def test_index_csp_headers(self):
         status, headers, _ = self._request("GET", "/")

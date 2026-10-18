@@ -81,6 +81,9 @@ llama-doctor serve http://127.0.0.1:8080
 
 `serve` runs a local HTTP server on port 8765; open `http://127.0.0.1:8765` in a browser. It polls the llama.cpp server every 2 s and keeps the last 300 points in memory.
 
+- Every metric has a help tooltip that says what it measures and how to read it.
+- A Queue tile shows requests being processed and requests deferred while waiting for a free slot (`requests_processing`, `requests_deferred`).
+
 ![Dashboard findings](docs/assets/dashboard-findings.png)
 
 The findings and recommendations panels re-run every analyzer on each poll, so a change to your server flags shows up within one interval. The dashboard binds to `127.0.0.1` by default and loads no external resources: no CDNs, fonts or analytics.

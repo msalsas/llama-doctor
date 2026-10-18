@@ -7,6 +7,7 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any, TextIO
 
+from llama_doctor.catalog import METRICS
 from llama_doctor.client import LlamaClient
 
 from .sampler import DEFAULT_RATE_WINDOW, Sampler
@@ -67,6 +68,7 @@ def make_server(
 ) -> ThreadingHTTPServer:
     root = default_static_dir() if static_dir is None else static_dir
     require_loopback_host = is_loopback(host)
+    catalog_body = json.dumps(METRICS).encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: object) -> None:
@@ -106,6 +108,9 @@ def make_server(
             if not self._host_allowed():
                 return
             path = self.path.partition("?")[0]
+            if path == "/api/catalog":
+                self._send(200, catalog_body, "application/json; charset=utf-8")
+                return
             if path == "/api/state":
                 try:
                     body = json.dumps(state(), allow_nan=False).encode("utf-8")

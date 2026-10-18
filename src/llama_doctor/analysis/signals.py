@@ -34,6 +34,15 @@ def decode_rate(ctx: DiagnosisContext) -> Rate | None:
     return None
 
 
+def deferred_peak(ctx: DiagnosisContext) -> float | None:
+    """Deepest queue seen: max of the deferred gauge over the window, else its current value."""
+    samples = ctx.window or ((ctx.metrics,) if ctx.metrics else ())
+    return max(
+        (sample.requests_deferred for sample in samples if sample.requests_deferred is not None),
+        default=None,
+    )
+
+
 def is_cpu_bound(ctx: DiagnosisContext) -> bool | None:
     prefill = prefill_rate(ctx)
     if prefill is None:

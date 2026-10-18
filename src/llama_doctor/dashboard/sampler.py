@@ -22,6 +22,7 @@ POINT_KEYS = (
     "draft_acceptance",
     "kv_usage_ratio",
     "requests_processing",
+    "requests_deferred",
 )
 
 
@@ -73,6 +74,7 @@ def delta_point(
         "draft_acceptance": None,
         "kv_usage_ratio": cur.kv_cache_usage_ratio,
         "requests_processing": cur.requests_processing,
+        "requests_deferred": cur.requests_deferred,
     }
     if prev is None:
         return point
@@ -158,7 +160,10 @@ class Sampler:
     def tick(self) -> None:
         try:
             snapshot = self._fetch()
-            report = diagnose(DiagnosisContext(snapshot), self._analyzers)
+            with self._lock:
+                baseline, window = self._advance_window(snapshot)
+            context = DiagnosisContext(snapshot, window=window)
+            report = diagnose(context, self._analyzers)
         except Exception as exc:  # noqa: BLE001
             with self._lock:
                 self._errors = {"sampler": type(exc).__name__}
@@ -171,13 +176,20 @@ class Sampler:
             self._errors = errors_to_dict(snapshot.errors)
             self._updated_at = snapshot.taken_at
             if snapshot.metrics is not None:
-                taken_at = snapshot.taken_at
-                if self._recent and _counters_reset(self._recent[-1][1], snapshot.metrics):
-                    self._recent.clear()
-                self._recent.append((taken_at, snapshot.metrics))
-                self._history.append(
-                    delta_point(self._baseline(taken_at), snapshot.metrics, taken_at)
-                )
+                self._history.append(delta_point(baseline, snapshot.metrics, snapshot.taken_at))
+
+    def _advance_window(
+        self, snapshot: ServerSnapshot
+    ) -> tuple[MetricsSnapshot | None, tuple[MetricsSnapshot, ...]]:
+        """Record ``snapshot``; return the rate baseline and the samples inside the window."""
+        if snapshot.metrics is None:
+            return None, ()
+        if self._recent and _counters_reset(self._recent[-1][1], snapshot.metrics):
+            self._recent.clear()
+        self._recent.append((snapshot.taken_at, snapshot.metrics))
+        cutoff = snapshot.taken_at - self._rate_window
+        window = tuple(metrics for sampled_at, metrics in self._recent if sampled_at >= cutoff)
+        return self._baseline(snapshot.taken_at), window
 
     def _baseline(self, taken_at: float) -> MetricsSnapshot | None:
         if len(self._recent) < 2:

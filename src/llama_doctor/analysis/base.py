@@ -62,6 +62,8 @@ class DiagnosisContext:
     snapshot: ServerSnapshot
     probe: ProbeResult | None = None
     hints: HostHints = HostHints()
+    # Dashboard samples inside the rate window, oldest first and current last; empty for one-shot.
+    window: tuple[MetricsSnapshot, ...] = ()
 
     @property
     def metrics(self) -> MetricsSnapshot | None:

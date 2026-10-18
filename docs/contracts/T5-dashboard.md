@@ -40,7 +40,9 @@ server: {model_name, quant, n_ctx, total_slots, build_info, n_gpu_layers, n_thre
 lifetime: {prefill_tps, decode_tps, cache_hit_ratio, avg_draft_len, draft_acceptance,
            kv_usage_ratio, n_tokens_max},
 history: [{t, decode_tps, prefill_tps, cache_hit_ratio, avg_draft_len, draft_acceptance,
-           kv_usage_ratio, requests_processing}],      // null = no data, draw a gap
+           kv_usage_ratio, requests_processing, requests_deferred}],
+                                                       // null = no data, draw a gap;
+                                                       // requests_* are instantaneous gauges
 report: {overall, exit_code, findings: [{analyzer, code, severity, title, detail,
          evidence: {k: v}, recommendations: [..]}], recommendations: [{action, rationale,
          impact, flag}]} | null,

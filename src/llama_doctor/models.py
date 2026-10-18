@@ -39,11 +39,21 @@ def ratio(num: float | None, den: float | None) -> float | None:
     return num / den
 
 
-def _sample_value(samples: Mapping[str, float], aliases: tuple[str, ...]) -> float | None:
+# Request counts add up across label sets (one series per model or slot); ratios do not.
+SUMMABLE_METRICS = frozenset({"requests_processing", "requests_deferred"})
+
+
+def _sample_value(
+    samples: Mapping[str, float], aliases: tuple[str, ...], summable: bool = False
+) -> float | None:
+    """Unlabeled series first; else a lone labeled series, or their sum when ``summable``."""
     for alias in aliases:
         for key in ("llamacpp:" + alias, alias):
             if key in samples:
                 return samples[key]
+            labeled = [value for name, value in samples.items() if name.startswith(key + "{")]
+            if len(labeled) == 1 or (labeled and summable):
+                return sum(labeled)
     return None
 
 
@@ -72,7 +82,7 @@ class MetricsSnapshot:
     ) -> "MetricsSnapshot":
         fields: dict[str, float | None] = {}
         for field_name, aliases in METRIC_ALIASES.items():
-            raw = _sample_value(samples, aliases)
+            raw = _sample_value(samples, aliases, field_name in SUMMABLE_METRICS)
             if raw is None or not math.isfinite(raw) or raw < 0:
                 fields[field_name] = None
             else:

@@ -60,7 +60,7 @@ dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .connection { margin: 0 0 16px; padding: 12px 16px; color: var(--text-2); }
 .hidden { display: none; }
 
-.tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; margin-bottom: 16px; }
+.tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: stretch; margin-bottom: 16px; }
 .tile { padding: 16px; min-height: 102px; }
 .tile-label, .secondary { color: var(--text-2); }
 .tile-label { font-size: 0.85rem; }
@@ -83,6 +83,45 @@ canvas { max-width: 100%; }
   color: var(--text-2);
   font-size: 0.82rem;
 }
+/* Info tooltips reuse .chart-note for their look; shown on hover or keyboard focus. */
+.info-wrap { position: relative; display: inline-block; margin-left: 6px; vertical-align: middle; }
+.info {
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border: 1px solid var(--text-3);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: help;
+  font: 600 0.7rem/1 ui-monospace, monospace;
+}
+.info:hover, .info:focus-visible { border-color: var(--text); color: var(--text); }
+.info:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.info-tip {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  width: min(300px, 70vw);
+  margin: 0;
+  border-left-color: var(--text-3);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.5);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+}
+.info-tip span { display: block; }
+.info-tip span + span { margin-top: 4px; color: var(--text-3); }
+.info:hover + .info-tip,
+.info:focus + .info-tip,
+.info:focus-visible + .info-tip,
+.info-tip:hover { display: block; }
+.info-wrap.dismissed .info-tip { display: none; }
+.tile:last-child .info-tip, .model-strip div:last-child .info-tip { left: auto; right: 0; }
+
 details { margin-top: 12px; color: var(--text-2); }
 summary { cursor: pointer; }
 .table-wrap { overflow-x: auto; margin-top: 8px; }

@@ -74,6 +74,33 @@ class TestMetricsSnapshot(unittest.TestCase):
         )
         self.assertAlmostEqual(snap.avg_draft_len, 2.0, places=6)
 
+    def test_queue_metrics_from_real_exposition(self):
+        snap = snapshot_from_fixture("metrics_queue.txt")
+        self.assertEqual(snap.requests_processing, 1.0)
+        self.assertEqual(snap.requests_deferred, 0.0)
+
+    def test_queue_metrics_sum_labeled_series(self):
+        snap = MetricsSnapshot.from_samples(parse_prometheus(
+            'llamacpp:requests_processing{slot="0"} 1\n'
+            'llamacpp:requests_processing{slot="1"} 2\n'
+            'llamacpp:requests_deferred{model="a"} 4\n'
+        ))
+        self.assertEqual(snap.requests_processing, 3.0)
+        self.assertEqual(snap.requests_deferred, 4.0)
+
+    def test_unlabeled_series_wins_over_labeled(self):
+        snap = MetricsSnapshot.from_samples(
+            {"llamacpp:requests_deferred": 2.0, 'llamacpp:requests_deferred{model="a"}': 9.0}
+        )
+        self.assertEqual(snap.requests_deferred, 2.0)
+
+    def test_ratio_gauge_with_several_label_sets_is_not_summed(self):
+        snap = MetricsSnapshot.from_samples({
+            'llamacpp:kv_cache_usage_ratio{a="1"}': 0.5,
+            'llamacpp:kv_cache_usage_ratio{a="2"}': 0.6,
+        })
+        self.assertIsNone(snap.kv_cache_usage_ratio)
+
 
 class TestPropsSnapshot(unittest.TestCase):
     def props_from_fixture(self, name):

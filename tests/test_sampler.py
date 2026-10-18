@@ -2,6 +2,7 @@ import json
 import time
 import unittest
 
+from llama_doctor.analysis.base import AnalyzerSpec
 from llama_doctor.dashboard.sampler import POINT_KEYS, Sampler, _delta_rate, delta_point
 from llama_doctor.models import EndpointError, MetricsSnapshot, ServerSnapshot
 from llama_doctor.promparse import parse_prometheus
@@ -91,8 +92,67 @@ class TestSampler(unittest.TestCase):
                 "draft_acceptance",
                 "kv_usage_ratio",
                 "requests_processing",
+                "requests_deferred",
             ),
         )
+
+    def test_delta_point_queue_gauges_are_current_values(self):
+        point = delta_point(
+            _metrics({"requests_processing": 1, "requests_deferred": 3}),
+            _metrics({"requests_processing": 1, "requests_deferred": 2}),
+            1.0,
+        )
+
+        self.assertEqual((point["requests_processing"], point["requests_deferred"]), (1.0, 2.0))
+
+    def test_tick_passes_window_samples_to_analyzers(self):
+        seen = []
+
+        def capture(ctx):
+            seen.append([sample.taken_at for sample in ctx.window])
+            return []
+
+        sampler = Sampler(
+            lambda: None,
+            target="t",
+            interval=1.0,
+            rate_window=2.0,
+            analyzers=(AnalyzerSpec("capture", "Capture", capture),),
+        )
+        self._run_ticks(sampler, {float(t): {"requests_deferred": 0.0} for t in range(4)})
+
+        self.assertEqual(seen, [[0.0], [0.0, 1.0], [0.0, 1.0, 2.0], [1.0, 2.0, 3.0]])
+
+    def test_queue_finding_follows_real_burst_through_window(self):
+        stages = ("0_base", "1_during", "2_during", "3_after", "3_after", "3_after")
+        scrapes = iter(
+            _snapshot(
+                _metrics(parse_prometheus(load_fixture(f"queue_burst/{stage}.txt")), float(t)),
+                float(t),
+            )
+            for t, stage in enumerate(stages)
+        )
+        sampler = Sampler(lambda: next(scrapes), target="t", interval=1.0, rate_window=2.0)
+
+        queue = []
+        for _ in stages:
+            sampler.tick()
+            finding = next(f for f in sampler._report.findings if f.analyzer_id == "queue")
+            queue.append((finding.code, finding.evidence["deferred_peak"]))
+
+        self.assertEqual(
+            queue,
+            [
+                ("queue.ok", 0.0),
+                ("queue.deferred", 3.0),
+                ("queue.deferred", 3.0),
+                ("queue.deferred", 3.0),
+                ("queue.deferred", 2.0),
+                ("queue.ok", 0.0),
+            ],
+        )
+        history = sampler.state()["history"]
+        self.assertEqual([p["requests_deferred"] for p in history], [0.0, 3.0, 2.0, 0.0, 0.0, 0.0])
 
     def test_tick_appends_history(self):
         snapshots = iter([_snapshot(_metrics(PREVIOUS), 1.0), _snapshot(_metrics(CURRENT), 2.0)])

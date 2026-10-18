@@ -215,6 +215,51 @@ class TestAnalyzers(unittest.TestCase):
     def test_props_ok_full(self):
         self.assert_finding(findings(make_context(), "props")[0], "props.ok", Severity.OK, {})
 
+    def _burst_context(self, *stages: str):
+        """Context whose window holds real scrapes of a 4-request burst on one slot; last is current."""
+        window = tuple(replace(make_context(f"queue_burst/{stage}.txt").metrics, taken_at=float(index))
+                       for index, stage in enumerate(stages))
+        context = make_context(f"queue_burst/{stages[-1]}.txt")
+        return replace(context, snapshot=replace(context.snapshot, metrics=window[-1]), window=window)
+
+    def test_queue_one_shot_uses_current_gauge(self):
+        finding = findings(make_context("queue_burst/1_during.txt"), "queue")[0]
+        self.assert_finding(finding, "queue.deferred", Severity.INFO,
+                            {"deferred_peak": 3.0, "requests_deferred": 3.0, "requests_processing": 1.0})
+        self.assertEqual(finding.title, "Requests are queued; all slots busy")
+        self.assert_finding(findings(make_context("queue_burst/3_after.txt"), "queue")[0],
+                            "queue.ok", Severity.OK, {"deferred_peak": 0.0})
+
+    def test_queue_fires_on_window_peak_after_queue_drains(self):
+        finding = findings(self._burst_context("0_base", "1_during", "2_during", "3_after"), "queue")[0]
+        self.assert_finding(finding, "queue.deferred", Severity.INFO,
+                            {"deferred_peak": 3.0, "requests_deferred": 0.0,
+                             "requests_processing": 0.0, "window_s": 3.0})
+
+    def test_queue_follows_gauge_down_inside_window(self):
+        finding = findings(self._burst_context("1_during", "2_during"), "queue")[0]
+        self.assertEqual((finding.evidence["deferred_peak"], finding.evidence["requests_deferred"]), (3.0, 2.0))
+        finding = findings(self._burst_context("2_during", "3_after"), "queue")[0]
+        self.assertEqual(finding.evidence["deferred_peak"], 2.0)
+
+    def test_queue_stops_firing_once_burst_leaves_window(self):
+        self.assert_finding(findings(self._burst_context("3_after", "0_base", "3_after"), "queue")[0],
+                            "queue.ok", Severity.OK, {"deferred_peak": 0.0})
+
+    def test_queue_missing_gauge_is_insufficient(self):
+        self.assert_finding(findings(make_context("metrics_minimal.txt"), "queue")[0],
+                            "queue.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+        self.assert_finding(findings(make_context(None), "queue")[0],
+                            "queue.insufficient_data", Severity.INSUFFICIENT_DATA, {})
+
+    def test_kv_saturated_tracks_queue_peak(self):
+        for context in (make_context("queue_burst/1_during.txt"),
+                        self._burst_context("1_during", "2_during", "3_after")):
+            self.assertEqual(findings(context, "kv")[0].code, "kv.saturated")
+        for context in (make_context("queue_burst/3_after.txt"),
+                        self._burst_context("0_base", "3_after")):
+            self.assertNotIn("kv.saturated", [item.code for item in findings(context, "kv")])
+
     def test_no_analyzer_raises_on_empty_context(self):
         empty = DiagnosisContext(ServerSnapshot(0, None, None, None, {}))
         for spec in BUILTIN_ANALYZERS:
