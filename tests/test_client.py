@@ -284,5 +284,104 @@ class TestLlamaClient(unittest.TestCase):
         self.assertEqual(timings.predicted_ms, 8000.0)
 
 
+class TestRoutedModel(unittest.TestCase):
+    def test_model_defaults_to_none(self):
+        self.assertIsNone(LlamaClient("http://h").model)
+        self.assertEqual(LlamaClient("http://h", model="qwen3").model, "qwen3")
+
+    def test_empty_model_rejected(self):
+        for value in ("", " ", "\t"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError) as ctx:
+                    LlamaClient("http://h", model=value)
+                self.assertEqual(str(ctx.exception), "model must not be empty")
+
+    def test_url_with_model_query_still_rejected(self):
+        with self.assertRaises(ValueError) as ctx:
+            normalize_base_url("http://h:8080?model=qwen3")
+        self.assertEqual(str(ctx.exception), "base URL must not contain '?' or '#'")
+
+    def test_fetch_metrics_appends_model(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/metrics?model=qwen3", 200, load_fixture("metrics_moe_offload.txt"))
+            client = LlamaClient(server.url, clock=lambda: 1234.5, model="qwen3")
+            snap = client.fetch_metrics()
+            self.assertAlmostEqual(snap.prefill_tps, 40.0, places=6)
+            self.assertEqual(snap.taken_at, 1234.5)
+            self.assertEqual([req[1] for req in server.requests], ["/metrics?model=qwen3"])
+
+    def test_model_is_percent_encoded(self):
+        target = "/metrics?model=org%2FQwen3%2030B%3AQ4_K%26x%3D1"
+        with FakeLlamaServer() as server:
+            server.set_route(target, 200, load_fixture("metrics_minimal.txt"))
+            client = LlamaClient(server.url, model="org/Qwen3 30B:Q4_K&x=1")
+            client.fetch_metrics()
+            self.assertEqual(server.requests[0][1], target)
+
+    def test_model_only_on_metrics(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/metrics?model=m", 200, load_fixture("metrics_minimal.txt"))
+            server.set_route(
+                "/props", 200, load_fixture("props_full.json"), content_type="application/json"
+            )
+            server.set_route(
+                "/v1/models", 200, load_fixture("models_full.json"), content_type="application/json"
+            )
+            server.set_route("/slots", 200, "[]", content_type="application/json")
+            client = LlamaClient(server.url, model="m")
+            snap = client.snapshot(include_slots=True)
+            self.assertEqual(
+                [req[1] for req in server.requests],
+                ["/metrics?model=m", "/props", "/v1/models", "/slots"],
+            )
+            self.assertEqual(snap.errors, {})
+
+    def test_metrics_error_endpoint_stays_bare(self):
+        with FakeLlamaServer() as server:
+            server.set_route(
+                "/props", 200, load_fixture("props_full.json"), content_type="application/json"
+            )
+            server.set_route(
+                "/v1/models", 200, load_fixture("models_full.json"), content_type="application/json"
+            )
+            client = LlamaClient(server.url, model="m")
+            with self.assertRaises(FetchError) as ctx:
+                client.fetch_metrics()
+            err = ctx.exception
+            self.assertEqual(err.endpoint, "/metrics")
+            self.assertEqual(err.status, 404)
+            self.assertEqual(err.reason, "HTTP 404")
+            self.assertNotIn("model", str(err))
+            snap = client.snapshot()
+            self.assertEqual(set(snap.errors), {"/metrics"})
+            self.assertEqual(snap.errors["/metrics"].endpoint, "/metrics")
+
+    def test_model_with_api_key(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/metrics?model=m", 200, load_fixture("metrics_minimal.txt"))
+            client = LlamaClient(server.url, api_key=Secret("k3y"), model="m")
+            client.fetch_metrics()
+            self.assertEqual(server.requests[0][2]["Authorization"], "Bearer k3y")
+
+    def test_complete_ignores_model(self):
+        body = json.dumps(
+            {
+                "timings": {
+                    "prompt_n": 1200,
+                    "prompt_ms": 3000.0,
+                    "predicted_n": 64,
+                    "predicted_ms": 8000.0,
+                },
+            }
+        )
+        with FakeLlamaServer() as server:
+            server.set_route("/completion", 200, body, content_type="application/json")
+            client = LlamaClient(server.url, model="m")
+            timings = client.complete("hello", 64)
+            self.assertEqual(timings.prompt_n, 1200)
+            self.assertEqual(server.requests[0][1], "/completion")
+            self.assertNotIn("model", json.loads(server.requests[0][3]))
+
+
 if __name__ == "__main__":
     unittest.main()
