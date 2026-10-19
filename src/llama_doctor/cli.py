@@ -49,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose_parser.add_argument("url", metavar="URL")
     diagnose_parser.add_argument("--json", action="store_true")
     diagnose_parser.add_argument("--api-key-env", metavar="VAR")
+    diagnose_parser.add_argument("--model", metavar="NAME")
     diagnose_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     diagnose_parser.add_argument("--probe", action="store_true")
     diagnose_parser.add_argument("--vram-gib", type=float, metavar="N")
@@ -65,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--history", type=_positive_int, default=300)
     serve_parser.add_argument("--rate-window", type=_positive_float, default=30.0, metavar="SEC")
     serve_parser.add_argument("--api-key-env", metavar="VAR")
+    serve_parser.add_argument("--model", metavar="NAME")
     serve_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     serve_parser.add_argument("--vram-gib", type=float, metavar="N")
     serve_parser.add_argument("--ram-gib", type=float, metavar="N")
@@ -84,7 +86,9 @@ def _api_key(name: str | None) -> Secret | None:
 
 def _client(args: argparse.Namespace) -> LlamaClient | None:
     try:
-        return LlamaClient(args.url, api_key=_api_key(args.api_key_env), timeout=args.timeout)
+        return LlamaClient(
+            args.url, api_key=_api_key(args.api_key_env), timeout=args.timeout, model=args.model
+        )
     except ValueError as exc:
         print(f"llama-doctor: {exc}", file=sys.stderr)
         return None
@@ -93,6 +97,9 @@ def _client(args: argparse.Namespace) -> LlamaClient | None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the llama-doctor command-line application."""
     args = build_parser().parse_args(argv)
+    if args.command == "diagnose" and args.probe and args.model is not None:
+        print("llama-doctor: --probe cannot be combined with --model", file=sys.stderr)
+        return EXIT_TOOL_ERROR
     client = _client(args)
     if client is None:
         return EXIT_TOOL_ERROR
