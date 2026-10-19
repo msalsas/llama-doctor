@@ -314,7 +314,10 @@ class TestCli(unittest.TestCase):
         with FakeLlamaServer() as server:
             _set_routes(server)
             self._run(["diagnose", server.url])
-            self.assertEqual(server.requests[0][1], "/metrics")
+            paths = [request[1] for request in server.requests]
+
+        self.assertEqual(paths[0], "/metrics")
+        self.assertFalse(any("?model=" in path for path in paths))
 
     def test_probe_with_model_exit_3(self):
         with FakeLlamaServer() as server:
@@ -326,6 +329,18 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result, EXIT_TOOL_ERROR)
         self.assertEqual(stdout, "")
         self.assertEqual(stderr, "llama-doctor: --probe cannot be combined with --model\n")
+
+    def test_probe_with_empty_model_exit_3(self):
+        with FakeLlamaServer() as server:
+            result, stdout, stderr = self._run(
+                ["diagnose", server.url, "--probe", "--model", ""]
+            )
+            self.assertEqual(server.requests, [])
+
+        self.assertEqual(result, EXIT_TOOL_ERROR)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "llama-doctor: --probe cannot be combined with --model\n")
+        self.assertNotIn("model must not be empty", stderr)
 
     def test_empty_model_exit_3(self):
         with FakeLlamaServer() as server:
@@ -356,7 +371,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIsNone(run.call_args.args[0].model)
 
-    def test_serve_allows_model_with_defaults(self):
+    def test_serve_forwards_model_and_options(self):
         dashboard_server = types.ModuleType("llama_doctor.dashboard.server")
         dashboard_server.run = Mock(return_value=0)
         with patch.dict(sys.modules, {"llama_doctor.dashboard.server": dashboard_server}):

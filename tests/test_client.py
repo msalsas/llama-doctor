@@ -318,6 +318,25 @@ class TestRoutedModel(unittest.TestCase):
             client.fetch_metrics()
             self.assertEqual(server.requests[0][1], target)
 
+    def test_model_with_surrounding_spaces_is_sent_verbatim(self):
+        for model, target in (
+            (" qwen3", "/metrics?model=%20qwen3"),
+            ("qwen3 ", "/metrics?model=qwen3%20"),
+        ):
+            with self.subTest(model=model), FakeLlamaServer() as server:
+                server.set_route(target, 200, load_fixture("metrics_minimal.txt"))
+                client = LlamaClient(server.url, model=model)
+                client.fetch_metrics()
+                self.assertEqual(server.requests[0][1], target)
+
+    def test_model_non_ascii_is_utf8_percent_encoded(self):
+        target = "/metrics?model=qwen3-%C3%A9"
+        with FakeLlamaServer() as server:
+            server.set_route(target, 200, load_fixture("metrics_minimal.txt"))
+            client = LlamaClient(server.url, model="qwen3-é")
+            client.fetch_metrics()
+            self.assertEqual(server.requests[0][1], target)
+
     def test_model_only_on_metrics(self):
         with FakeLlamaServer() as server:
             server.set_route("/metrics?model=m", 200, load_fixture("metrics_minimal.txt"))
