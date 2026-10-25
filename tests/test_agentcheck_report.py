@@ -4,11 +4,11 @@ import unittest
 from llama_doctor import __version__
 from llama_doctor.agentcheck.cases import CONFORMANCE_CASES
 from llama_doctor.agentcheck.checks import (
-    Outcome,
     AgentCheckResult,
     CaseResult,
     ConformanceResult,
     EmptyTurnResult,
+    Outcome,
     ReplayResult,
     TurnResult,
 )

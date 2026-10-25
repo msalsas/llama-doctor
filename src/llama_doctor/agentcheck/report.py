@@ -49,9 +49,10 @@ def render_text(result: AgentCheckResult, *, target: str) -> str:
             max_prompt: int | None = None
             for replay in turn.replays:
                 turn_counts[replay.outcome] += 1
-                if replay.prompt_tokens is not None:
-                    if max_prompt is None or replay.prompt_tokens > max_prompt:
-                        max_prompt = replay.prompt_tokens
+                if replay.prompt_tokens is not None and (
+                    max_prompt is None or replay.prompt_tokens > max_prompt
+                ):
+                    max_prompt = replay.prompt_tokens
             parts = [f"{turn_counts[outcome]} {outcome.value}"
                      for outcome in _OUTCOME_ORDER if turn_counts[outcome] > 0]
             prompt = f"{max_prompt}" if max_prompt is not None else "n/a"

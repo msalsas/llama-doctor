@@ -7,14 +7,14 @@ from llama_doctor.agentcheck.cases import CONFORMANCE_CASES
 from llama_doctor.agentcheck.chat import ChatClient, ChatReply, ToolCall
 from llama_doctor.agentcheck.checks import (
     MIN_REPLAY_CTX,
-    Outcome,
-    ReplayResult,
-    Verdict,
     AgentCheckResult,
     CaseResult,
     ConformanceResult,
     EmptyTurnResult,
+    Outcome,
+    ReplayResult,
     TurnResult,
+    Verdict,
     classify,
     conformance_verdict,
     empty_turn_verdict,

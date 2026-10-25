@@ -73,9 +73,11 @@ class TestAgentcheckCli(unittest.TestCase):
         ]
         for args in cases:
             with self.subTest(args=args[2:]):
-                with contextlib.redirect_stderr(io.StringIO()):
-                    with self.assertRaises(SystemExit) as raised:
-                        main(args)
+                with (
+                    contextlib.redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    main(args)
                 self.assertEqual(raised.exception.code, 3)
 
     def test_unset_api_key_env_exits_three(self):

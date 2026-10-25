@@ -7,10 +7,10 @@ from typing import Any, TextIO
 from llama_doctor.client import FetchError
 
 from .cases import (
-    TOOL_CATALOG,
-    TOOL_SCHEMAS,
-    TOOL_NAMES,
     CONFORMANCE_CASES,
+    TOOL_CATALOG,
+    TOOL_NAMES,
+    TOOL_SCHEMAS,
     ConformanceCase,
     ExpectedCall,
     agentic_turns,
