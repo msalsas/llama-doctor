@@ -95,6 +95,14 @@ class TestAgentcheckCli(unittest.TestCase):
         self.assertIn("llama-doctor: unexpected error: synthetic crash", stderr)
         self.assertNotIn("Traceback", stderr)
 
+    def test_replays_capped_at_fifty(self):
+        with (
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            main(["agentcheck", "http://127.0.0.1:9", "--replays", "51"])
+        self.assertEqual(raised.exception.code, 3)
+
     def test_unset_api_key_env_exits_three(self):
         os.environ.pop("LLAMA_DOCTOR_AGENTCHECK_TEST_KEY", None)
         code, _, stderr = run_cli(

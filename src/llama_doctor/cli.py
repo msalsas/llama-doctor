@@ -41,6 +41,13 @@ def _positive_int(value: str) -> int:
     return number
 
 
+def _replay_count(value: str) -> int:
+    number = _positive_int(value)
+    if number > 50:
+        raise argparse.ArgumentTypeError("must be at most 50")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the llama-doctor command-line parser."""
     parser = _ArgumentParser(prog="llama-doctor")
@@ -80,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     agentcheck_parser.add_argument(
         "--timeout", type=_positive_float, default=AGENTCHECK_TIMEOUT, metavar="SEC"
     )
-    agentcheck_parser.add_argument("--replays", type=_positive_int, default=6, metavar="N")
+    agentcheck_parser.add_argument("--replays", type=_replay_count, default=6, metavar="N")
     agentcheck_parser.add_argument("--max-tokens", type=_positive_int, default=512, metavar="N")
     return parser
 
