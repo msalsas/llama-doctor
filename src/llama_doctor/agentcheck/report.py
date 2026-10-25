@@ -108,8 +108,9 @@ def agentcheck_document(result: AgentCheckResult, *, target: str) -> dict[str, A
         "empty_turn": {
             "verdict": result.empty_turn.verdict.name.lower(),
             "skipped": result.empty_turn.skipped,
-            "counts": {outcome.value: result.empty_turn.counts[outcome]
-                       for outcome in Outcome},
+            "counts": {
+                outcome.value: result.empty_turn.counts[outcome] for outcome in Outcome
+            },
             "turns": [
                 {
                     "id": turn.turn_id,
