@@ -222,7 +222,16 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             )
         elif calls and not _calls_match(case.expected, calls):
             expected_names = ", ".join(exp.name for exp in case.expected)
-            _add(Symptom.WRONG_TOOL, f"expected {expected_names}, got {', '.join(called)}")
+            if sorted(exp.name for exp in case.expected) == sorted(
+                call.name or "?" for call in calls
+            ):
+                _add(
+                    Symptom.WRONG_TOOL,
+                    f"expected {expected_names} with the expected argument hints, "
+                    f"got {', '.join(called)}",
+                )
+            else:
+                _add(Symptom.WRONG_TOOL, f"expected {expected_names}, got {', '.join(called)}")
     else:
         allowed = [call for call in calls if case.refusal and call.name == "clarify"]
         stray = [call for call in calls if call not in allowed and call.name in TOOL_SCHEMAS]

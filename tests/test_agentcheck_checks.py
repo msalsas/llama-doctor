@@ -168,7 +168,17 @@ class TestEvaluateCase(unittest.TestCase):
         calls = (ToolCall("c1", "search_files", {"pattern": "x"}, None),)
         result = evaluate_case(case, make_reply(tool_calls=calls))
         self.assertIn(Symptom.WRONG_TOOL, result.symptoms)
-        self.assertIn("expected read_file", result.detail)
+        self.assertEqual(result.detail, "expected read_file, got search_files")
+
+    def test_wrong_arguments_reported_as_hint_mismatch(self):
+        case = CASES_BY_ID["select_read_file"]
+        calls = (ToolCall("c1", "read_file", {"path": "somewhere/else.py"}, None),)
+        result = evaluate_case(case, make_reply(tool_calls=calls))
+        self.assertIn(Symptom.WRONG_TOOL, result.symptoms)
+        self.assertEqual(
+            result.detail,
+            "expected read_file with the expected argument hints, got read_file",
+        )
 
 
 class TestVerdicts(unittest.TestCase):
