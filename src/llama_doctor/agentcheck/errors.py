@@ -1,0 +1,2 @@
+class AgentCheckError(Exception):
+    pass
