@@ -120,8 +120,8 @@ class TestAgenticTurns(unittest.TestCase):
         for turn in agentic_turns():
             with self.subTest(turn=turn.id):
                 size = len(json.dumps(turn.messages)) + catalog_size
-                self.assertGreaterEqual(size, 32000)
-                self.assertLessEqual(size, 40000)
+                self.assertGreaterEqual(size, 38000)
+                self.assertLessEqual(size, 46000)
 
     def test_turns_end_on_tool_message_with_matching_call_ids(self):
         turn_ids = [turn.id for turn in agentic_turns()]

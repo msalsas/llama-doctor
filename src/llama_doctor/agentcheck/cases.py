@@ -200,8 +200,8 @@ SENTENCE_POOL: tuple[str, ...] = (
     "The roadmap lists faster settlement, better partner onboarding and simpler statement exports.",
 )
 
-SYSTEM_FILLER_WORDS = 2000
-RESULT_FILLER_WORDS = 2400
+SYSTEM_FILLER_WORDS = 2350
+RESULT_FILLER_WORDS = 2800
 
 
 def filler(seed: int, words: int) -> str:
