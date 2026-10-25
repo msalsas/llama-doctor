@@ -77,6 +77,23 @@ class TestReadme(unittest.TestCase):
             with self.subTest(flag=flag):
                 self.assertIn(f"`{flag}", serve)
 
+    def test_agentcheck_documents_every_flag(self):
+        agentcheck = self.readme.split("`llama-doctor agentcheck URL`")[-1]
+        agentcheck = agentcheck.split("\n## ", 1)[0]
+        parser = build_parser()
+        agentcheck_parser = parser._subparsers._group_actions[0].choices["agentcheck"]
+        flags = {
+            option
+            for action in agentcheck_parser._actions
+            for option in action.option_strings
+            if option.startswith("--") and option != "--help"
+        }
+        self.assertEqual(flags, {"--json", "--api-key-env", "--timeout", "--replays",
+                                 "--max-tokens"})
+        for flag in flags:
+            with self.subTest(flag=flag):
+                self.assertIn(f"`{flag}", agentcheck)
+
     def test_quick_start_example_matches_rendered_fixture(self):
         """The example block is real output: analyzers run on a fixture with the same counters."""
         quick_start = self.readme.split("## Quick start", 1)[1].split("\n## ", 1)[0]

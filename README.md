@@ -107,6 +107,25 @@ Every tile, chart and the quant, context and slots fields in the header have a h
 
 The findings and recommendations panels re-run every analyzer on each poll, so a change to your server flags shows up within one interval. The dashboard binds to `127.0.0.1` by default and loads no external resources: no CDNs, fonts or analytics.
 
+## Agent readiness check
+
+`llama-doctor agentcheck URL` tests whether the model behind an OpenAI-compatible endpoint can drive a coding agent. It sends greedy (`temperature 0`) requests to `/v1/chat/completions` and reports three things:
+
+- **Tool-call conformance.** Ten single-turn cases against a fixed 15-tool catalog: correct tool selection, arguments that validate against each tool's JSON Schema (type, properties, required, enum), two calls in one turn, a polite refusal when asked for a tool that does not exist, and correct behaviour for `tool_choice` `auto` and `none`. The score is shown out of 10.
+- **Empty-turn detection.** Three synthetic agent turns of 8–10k prompt tokens (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
+- **Remediation.** Each symptom found is mapped to concrete settings for the detected server family.
+
+The server family is detected before any check runs. A `GET /props` that returns 200 means the llama.cpp family. Otherwise, `GET /v1/models` entries with `meta.instanceId` or `owned_by` Strata mean the Strata family. Anything else is reported as unknown and gets generic advice only.
+
+| Symptom | llama.cpp family | Strata family (config keys) |
+| --- | --- | --- |
+| Empty turn or thought runaway | Relaunch with `--reasoning-budget 2048`. | `reasoning_budget_tokens` (0 = off; per-request `thinking_budget_tokens` is also accepted), `reasoning_close_retry` `on`, `reasoning_loop_recovery` `recover`, `reasoning_effort` for the default level. |
+| Malformed tool arguments or template leaks | Ensure `--jinja`, check the chat template, try `--grammar`. | No server setting known; generic advice is shown. |
+
+agentcheck never sends reasoning controls itself, so the result reflects the server as configured. The corpus is built deterministically, and repeated runs send byte-identical prompts. A run makes 10 short requests plus 18 long ones, so on slow hardware it can take several minutes; the per-request `--timeout` defaults to 300 seconds.
+
+Exit codes: `0` all checks pass, `1` warnings only, `2` a phase failed, `3` tool or configuration error (for example an authentication failure, or an endpoint that is not OpenAI-compatible).
+
 ## CLI reference
 
 `llama-doctor diagnose URL`
@@ -123,7 +142,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--no-color` | Disable ANSI colour in text output. |
 | `--no-slots` | Do not read `GET /slots` (live context and the KV estimate in findings). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
 
-`--probe` is off by default. It is the only option that sends a write request to the server; everything else is a read-only GET.
+In `diagnose`, `--probe` is off by default and is the only option that sends a write request. `agentcheck` always sends chat completion requests.
 
 `llama-doctor serve URL`
 
@@ -140,6 +159,16 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--no-slots` | Do not poll `GET /slots`, same as in `diagnose`; the context tile then shows only the peak. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.
+
+`llama-doctor agentcheck URL`
+
+| Flag | Effect |
+| --- | --- |
+| `--json` | Print the result as JSON instead of text. |
+| `--replays N` | Replays per synthetic agent turn in the empty-turn check (default `6`). |
+| `--max-tokens N` | Token limit for each empty-turn replay (default `512`); conformance cases use 2048. |
+| `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
+| `--timeout SEC` | HTTP timeout per request, greater than 0 (default `300`). |
 
 ## Checks
 

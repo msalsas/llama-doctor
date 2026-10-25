@@ -223,6 +223,33 @@ requested `/slots` got nothing usable, and stays true for the session.
 The analyzers also receive the samples inside the window, which `queue` uses
 for the deepest queue seen.
 
+## Agent readiness check (T6, `agentcheck`)
+
+`agentcheck` measures whether the model behind an OpenAI-compatible endpoint
+can drive a coding agent. It lives in `src/llama_doctor/agentcheck/` and uses
+the same `LlamaClient._fetch_json` transport as everything else, so redirects,
+size limits, error mapping and secret handling are unchanged. Every request is
+greedy (`temperature 0`, `seed 0`); agentcheck never sends reasoning controls
+and only reports which server settings to change.
+
+Detection runs first: `GET /props` returning 200 means llama.cpp, otherwise
+`meta.instanceId` or `owned_by` Strata in `GET /v1/models` mean Strata, and
+anything else is unknown (generic advice only). Strata markers win over a
+`/props` 200 because Strata emulates the llama.cpp HTTP surface. Detection
+never infers a family from the model name or the port.
+
+Phase A scores ten single-turn cases against a fixed 15-tool catalog:
+selection, schema-valid arguments, parallel calls, refusal of unknown tools
+and `tool_choice` handling, each graded by symptom
+(`wrong_tool`, `malformed_tool_args`, `template_leak`, ...). Phase B replays
+three synthetic agent turns of 8-10k tokens and classifies each reply as
+actionable, empty or thought runaway; a single empty reply fails the phase.
+Both phases map fatal `FetchError`s (401/403/404/405 or an unusable
+endpoint) to `AgentCheckError`, which `cli.main` maps to exit 3, and record
+non-fatal ones as symptoms. The corpus is deterministic (LCG filler over a
+fixed sentence pool), so repeated runs send byte-identical prompts and the
+offline tests can assert exact sizes.
+
 ## Security notes
 
 `/props` includes `media_marker`, a sentinel string that multimodal servers
