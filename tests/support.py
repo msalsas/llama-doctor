@@ -112,7 +112,10 @@ class FakeLlamaServer:
                 for name, value in extra.items():
                     self.send_header(name, value)
                 self.end_headers()
-                self.wfile.write(payload)
+                try:
+                    self.wfile.write(payload)
+                except BrokenPipeError:
+                    pass
 
             do_GET = _dispatch
             do_POST = _dispatch
