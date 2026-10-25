@@ -1,7 +1,7 @@
 import json
 import os
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from llama_doctor.analysis.base import DiagnosisContext, HostHints
@@ -48,6 +48,7 @@ def make_context(
 class FakeLlamaServer:
     def __init__(self) -> None:
         self._routes: dict[str, tuple[int, bytes, str, dict[str, str]]] = {}
+        self._responders: dict[str, Callable[[bytes], tuple[int, str | bytes, str]]] = {}
         self.requests: list[tuple[str, str, dict[str, str], bytes]] = []
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler_class())
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -70,6 +71,11 @@ class FakeLlamaServer:
             body = body.encode("utf-8")
         self._routes[path] = (status, body, content_type, dict(headers or {}))
 
+    def set_responder(
+        self, path: str, func: Callable[[bytes], tuple[int, str | bytes, str]]
+    ) -> None:
+        self._responders[path] = func
+
     def __enter__(self) -> "FakeLlamaServer":  # noqa: PYI034
         return self
 
@@ -88,11 +94,18 @@ class FakeLlamaServer:
                 length = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(length) if length else b""
                 outer.requests.append((self.command, self.path, dict(self.headers), body))
-                route = outer._routes.get(self.path)
-                if route is None:
-                    status, payload, content_type, extra = 404, b"", "text/plain", {}
+                responder = outer._responders.get(self.path)
+                if responder is not None:
+                    status, payload, content_type = responder(body)
+                    if isinstance(payload, str):
+                        payload = payload.encode("utf-8")
+                    extra: dict[str, str] = {}
                 else:
-                    status, payload, content_type, extra = route
+                    route = outer._routes.get(self.path)
+                    if route is None:
+                        status, payload, content_type, extra = 404, b"", "text/plain", {}
+                    else:
+                        status, payload, content_type, extra = route
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(payload)))
