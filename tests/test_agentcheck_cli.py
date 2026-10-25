@@ -70,6 +70,8 @@ class TestAgentcheckCli(unittest.TestCase):
         cases = [
             ["agentcheck", "http://127.0.0.1:9", "--timeout", "0"],
             ["agentcheck", "http://127.0.0.1:9", "--timeout", "-1"],
+            ["agentcheck", "http://127.0.0.1:9", "--timeout", "inf"],
+            ["agentcheck", "http://127.0.0.1:9", "--timeout", "nan"],
             ["agentcheck", "http://127.0.0.1:9", "--replays", "0"],
             ["agentcheck", "http://127.0.0.1:9", "--max-tokens", "abc"],
         ]

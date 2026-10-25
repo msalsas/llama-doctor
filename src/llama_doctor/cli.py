@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import sys
 from collections.abc import Sequence
@@ -25,7 +26,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 def _positive_float(value: str) -> float:
     number = float(value)
-    if not number > 0:
+    if not math.isfinite(number) or not number > 0:
         raise argparse.ArgumentTypeError("must be > 0")
     return number
 
@@ -35,7 +36,7 @@ def _positive_int(value: str) -> int:
         number = int(value)
     except ValueError:
         raise argparse.ArgumentTypeError("must be an integer > 0") from None
-    if number <= 0:
+    if not math.isfinite(number) or number <= 0:
         raise argparse.ArgumentTypeError("must be > 0")
     return number
 
