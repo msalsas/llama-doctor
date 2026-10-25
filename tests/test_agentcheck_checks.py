@@ -28,7 +28,7 @@ from llama_doctor.agentcheck.family import Family, ServerFamily
 from llama_doctor.agentcheck.remediation import Symptom
 from llama_doctor.client import LlamaClient
 
-from .agentcheck_fakes import agent_server, call, perfect_reply, reply
+from .agentcheck_fakes import agent_server, perfect_reply, reply
 
 CASES_BY_ID = {case.id: case for case in CONFORMANCE_CASES}
 
