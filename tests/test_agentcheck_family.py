@@ -1,10 +1,13 @@
 import json
 import unittest
 
+from llama_doctor.agentcheck.cases import CONFORMANCE_CASES
+from llama_doctor.agentcheck.chat import ChatClient
 from llama_doctor.agentcheck.errors import AgentCheckError
 from llama_doctor.agentcheck.family import Family, detect_family
 from llama_doctor.client import LlamaClient
 
+from .agentcheck_fakes import agent_server
 from .support import FakeLlamaServer
 
 
@@ -73,6 +76,17 @@ class TestDetectFamily(unittest.TestCase):
                 "application/json")
             family = detect_family(make_client(server.url))
         self.assertEqual(family.name, Family.STRATA)
+
+    def test_long_model_id_sent_intact_in_chat_payload(self):
+        long_id = "m" * 200
+        with agent_server(models={"data": [{"id": long_id}]}) as server:
+            family = detect_family(make_client(server.url))
+            chat = ChatClient(make_client(server.url), family.model_id)
+            chat.chat([{"role": "user", "content": CONFORMANCE_CASES[0].prompt}],
+                      [], max_tokens=32)
+        self.assertEqual(family.model_id, long_id)
+        payload = json.loads(server.requests[-1][3])
+        self.assertEqual(payload["model"], long_id)
 
     def test_auth_error_raises(self):
         with FakeLlamaServer() as server:

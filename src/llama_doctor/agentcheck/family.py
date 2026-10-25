@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any
 
 from llama_doctor.client import FetchError, LlamaClient
-from llama_doctor.models import ModelsMeta, PropsSnapshot
+from llama_doctor.models import PropsSnapshot
 
 from .errors import AgentCheckError
 
@@ -45,7 +45,7 @@ def detect_family(client: LlamaClient) -> ServerFamily:
             "server unreachable "
             f"(/props: {props_err.reason}, /v1/models: {models_err.reason})"
         )
-    model_id = ModelsMeta.from_payload(models).model_id if models is not None else None
+    model_id = _raw_model_id(models)
     marker = _strata_marker(models)
     if marker is not None:
         return ServerFamily(Family.STRATA, marker, model_id, None)
@@ -66,6 +66,20 @@ def _try_get(client: LlamaClient, path: str) -> tuple[Any, FetchError | None]:
         return client.get_json(path), None
     except FetchError as exc:
         return None, exc
+
+
+def _raw_model_id(models: Any) -> str | None:
+    if not isinstance(models, dict):
+        return None
+    data = models.get("data")
+    if not isinstance(data, list):
+        return None
+    entries = [entry for entry in data if isinstance(entry, dict)]
+    if not entries:
+        return None
+    entry = next((item for item in entries if item.get("loaded") is True), entries[0])
+    model_id = entry.get("id")
+    return model_id if isinstance(model_id, str) else None
 
 
 def _strata_marker(models: Any) -> str | None:
