@@ -1,6 +1,6 @@
 import unittest
 
-from llama_doctor.agentcheck.schema import validate
+from llama_doctor.agentcheck.schema import _brief, validate
 
 TODO_LIST_SCHEMA = {
     "type": "object",
@@ -34,6 +34,12 @@ WEB_SEARCH_SCHEMA = {
 
 
 class TestValidate(unittest.TestCase):
+    def test_brief_removes_controls_and_truncates(self):
+        result = _brief("bad\x00\x1b\n" + "x" * 5000)
+        self.assertLess(len(result), 90)
+        self.assertTrue(all(ord(char) >= 32 and ord(char) != 0x7F for char in result))
+        self.assertTrue(result.endswith("…"))
+
     def test_valid_object_passes(self):
         value = {"action": "update", "id": 3, "status": "completed"}
         self.assertEqual(validate(TODO_LIST_SCHEMA, value), [])

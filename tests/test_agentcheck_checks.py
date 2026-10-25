@@ -169,6 +169,14 @@ class TestEvaluateCase(unittest.TestCase):
         self.assertIn(Symptom.MALFORMED_TOOL_ARGS, result.symptoms)
         self.assertIn("$.max_results", result.detail)
 
+    def test_malformed_tool_args_briefs_recognized_tool_name(self):
+        case = CASES_BY_ID["select_read_file"]
+        calls = (ToolCall("c1", "read_file", None, "arguments are not valid JSON"),)
+        result = evaluate_case(case, make_reply(tool_calls=calls))
+        self.assertIn(Symptom.MALFORMED_TOOL_ARGS, result.symptoms)
+        self.assertTrue(result.detail.startswith("read_file: arguments are not valid JSON"))
+        self.assertLess(len(result.detail), 200)
+
     def test_unknown_tool_refusal(self):
         case = CASES_BY_ID["unknown_tool_refusal"]
         polite = evaluate_case(case, make_reply(content="I cannot deploy; the tool does not "
