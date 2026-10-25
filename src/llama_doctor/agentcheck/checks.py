@@ -20,7 +20,7 @@ from .chat import ChatClient, ChatReply
 from .errors import AgentCheckError
 from .family import ServerFamily
 from .remediation import AppliedRemedy, Symptom
-from .schema import validate
+from .schema import _brief, validate
 
 CONFORMANCE_MAX_TOKENS = 2048
 MIN_REPLAY_CTX = 12288
@@ -150,16 +150,6 @@ _MARKUP = re.compile(
     r'|"name"\s*:\s*"(?:' + "|".join(TOOL_NAMES) + r')"'
 )
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
-
-
-def _brief(text: str) -> str:
-    cleaned = " ".join(_CONTROL_CHARS.sub(" ", text).split())
-    if len(cleaned) > 80:
-        return cleaned[:80] + "…"
-    return cleaned
-
-
 def split_think(text: str | None) -> tuple[str, str]:
     if text is None:
         return ("", "")
@@ -203,9 +193,12 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
         if call.name not in TOOL_SCHEMAS:
             _add(Symptom.HALLUCINATED_TOOL, f"called unknown tool {_brief(call.name or '?')!r}")
         elif call.error:
-            _add(Symptom.MALFORMED_TOOL_ARGS, f"{call.name}: {call.error}")
+            _add(Symptom.MALFORMED_TOOL_ARGS, f"{_brief(call.name or chr(63))}: {call.error}")
         elif errors := validate(TOOL_SCHEMAS[call.name], call.arguments):
-            _add(Symptom.MALFORMED_TOOL_ARGS, f"{call.name}: {errors[0]}")
+            _add(
+                Symptom.MALFORMED_TOOL_ARGS,
+                f"{_brief(call.name or chr(63))}: {errors[0]}",
+            )
     if not calls and has_tool_markup(visible):
         _add(Symptom.TEMPLATE_LEAK, "tool-call markup in reply text")
     if case.expected:
@@ -233,10 +226,13 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
                 _add(
                     Symptom.WRONG_TOOL,
                     f"expected {expected_names} with arguments {hints}, "
-                    f"got {', '.join(called)}",
+                    f"got {', '.join(_brief(name) for name in called)}",
                 )
             else:
-                _add(Symptom.WRONG_TOOL, f"expected {expected_names}, got {', '.join(called)}")
+                _add(
+                    Symptom.WRONG_TOOL,
+                    f"expected {expected_names}, got {', '.join(_brief(name) for name in called)}",
+                )
     else:
         allowed = [call for call in calls if case.refusal and call.name == "clarify"]
         stray = [call for call in calls if call not in allowed and call.name in TOOL_SCHEMAS]
@@ -250,6 +246,8 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             _add(_silent_symptom(reply, visible, inline_reasoning), "no text and no tool call")
     passed = not symptoms
     detail = "ok" if passed else "; ".join(messages)
+    if len(detail) >= 200:
+        detail = detail[:199]
     return CaseResult(case.id, case.title, passed, tuple(symptoms), detail, called)
 
 

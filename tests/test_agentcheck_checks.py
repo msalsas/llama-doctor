@@ -112,6 +112,15 @@ class TestEvaluateCase(unittest.TestCase):
         result = evaluate_case(case, make_reply(tool_calls=calls))
         self.assertIn(Symptom.HALLUCINATED_TOOL, result.symptoms)
 
+    def test_long_wrong_tool_name_is_briefed_in_detail_but_raw_in_called(self):
+        case = CASES_BY_ID["select_read_file"]
+        name = "bad\x00tool\n" + "x" * 5000
+        result = evaluate_case(case, make_reply(tool_calls=(ToolCall("c1", name, None, None),)))
+        self.assertIn(Symptom.WRONG_TOOL, result.symptoms)
+        self.assertLess(len(result.detail), 200)
+        self.assertTrue(all(ord(char) >= 32 and ord(char) != 127 for char in result.detail))
+        self.assertEqual(result.called, (name,))
+
     def test_long_tool_name_is_raw_in_called_and_briefed_in_text_report(self):
         case = CASES_BY_ID["tool_choice_auto_no_tool"]
         name = "bad\x00tool\n" + "x" * 5000

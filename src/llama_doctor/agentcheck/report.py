@@ -2,8 +2,9 @@ from typing import Any
 
 from llama_doctor import __version__
 
-from .checks import AgentCheckResult, Outcome, _brief
+from .checks import AgentCheckResult, Outcome
 from .family import Family
+from .schema import _brief
 
 _OUTCOME_ORDER = (
     Outcome.ACTIONABLE,

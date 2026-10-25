@@ -417,8 +417,9 @@ evaluate_case(case, reply):
     visible, inline_reasoning = split_think(reply.content)
     for c in calls:
         if c.name not in TOOL_SCHEMAS: _add(HALLUCINATED_TOOL, f"called unknown tool {_brief(c.name or '?')!r}")
-        elif c.error: _add(MALFORMED_TOOL_ARGS, f"{c.name}: {c.error}")
-        elif errs := validate(TOOL_SCHEMAS[c.name], c.arguments): _add(MALFORMED_TOOL_ARGS, f"{c.name}: {errs[0]}")
+        elif c.error: _add(MALFORMED_TOOL_ARGS, f"{_brief(c.name or chr(63))}: {c.error}")
+        elif errs := validate(TOOL_SCHEMAS[c.name], c.arguments):
+            _add(MALFORMED_TOOL_ARGS, f"{_brief(c.name or chr(63))}: {errs[0]}")
     if not calls and has_tool_markup(visible):
         _add(TEMPLATE_LEAK, "tool-call markup in reply text")
     if case.expected:
@@ -433,9 +434,17 @@ evaluate_case(case, reply):
                     for exp in case.expected
                     for key, value in exp.args.items()
                 )
-                _add(WRONG_TOOL, f"expected {names(case)} with arguments {hints}, got {', '.join(called)}")
+                _add(
+                    WRONG_TOOL,
+                    f"expected {names(case)} with arguments {hints}, "
+                    f"got {', '.join(_brief(name) for name in called)}",
+                )
             else:
-                _add(WRONG_TOOL, f"expected {names(case)}, got {', '.join(called)}")
+                _add(
+                    WRONG_TOOL,
+                    f"expected {names(case)}, "
+                    f"got {', '.join(_brief(name) for name in called)}",
+                )
     else:
         allowed = [c for c in calls if case.refusal and c.name == "clarify"]
         stray = [c for c in calls if c not in allowed and c.name in TOOL_SCHEMAS]
@@ -447,9 +456,10 @@ evaluate_case(case, reply):
             _add(_silent_symptom(reply, visible, inline_reasoning), "no text and no tool call")
     passed = not symptoms
     detail = "ok" if passed else "; ".join(messages)
+    if len(detail) >= 200: detail = detail[:199]
     return CaseResult(case.id, case.title, passed, tuple(symptoms), detail, called)
 
-_brief(text):
+_brief(text), defined in `schema.py` and shared by `checks.py`:
     replace control characters and runs of whitespace with single spaces (" ".join after
     mapping [\x00-\x1f\x7f] to spaces); if the result is longer than 80 characters, keep the
     first 80 and append the "…" character. Applied to every model-supplied tool name embedded
