@@ -133,7 +133,7 @@ fn   = raw.get("function") if dict else {}
 name = fn.get("name") if str else None
 args = fn.get("arguments")
 dict           -> ToolCall(id, name, args, None)
-str            -> json.loads; ValueError -> error "arguments are not valid JSON"
+str            -> json.loads; ValueError or RecursionError -> error "arguments are not valid JSON"
                    parsed not dict -> error "arguments are not a JSON object"
 anything else  -> error "arguments missing"
 id = raw.get("id") if str else None
@@ -317,6 +317,7 @@ class AgentCheckResult:
 
 def split_think(text: str | None) -> tuple[str, str]: ...
 def has_tool_markup(text: str) -> bool: ...
+def _brief(text: str) -> str: ...
 def classify(reply: ChatReply) -> Outcome: ...
 def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult: ...
 def conformance_verdict(score: int, total: int) -> Verdict: ...
@@ -350,7 +351,8 @@ detect_family(client):
     if props_err and models_err and props_err.status is None and models_err.status is None
        and props_err.reason in UNREACHABLE_REASONS and models_err.reason in UNREACHABLE_REASONS:
         raise AgentCheckError(f"server unreachable (/props: {props_err.reason}, /v1/models: {models_err.reason})")
-    model_id = ModelsMeta.from_payload(models).model_id if models is not None else None
+    model_id = raw "id" of the loaded:true /v1/models entry (first entry if none is loaded:true),
+               None unless it is a str; never ModelsMeta.safe_str, which truncates at 128 chars
     marker = _strata_marker(models)
     if marker: return ServerFamily(STRATA, marker, model_id, None)
     if isinstance(props, dict):
@@ -370,6 +372,8 @@ _strata_marker(models):
 Notes:
 - A `/props` 200 with a non-JSON body (for example an HTML proxy page) raises `FetchError("invalid JSON")` with status None. That counts as **not** llama.cpp and detection falls through to the Strata check.
 - Detection never infers a family from the model name or the port.
+- `model_id` is the raw entry id, so ids longer than 128 characters are sent intact in chat
+  payloads; the report displays it as-is.
 
 ### 2.2 Error policy (applies to every chat request)
 
@@ -403,13 +407,13 @@ run_conformance(chat):
 evaluate_case(case, reply):
     symptoms = []   (ordered, no duplicates; use _add(sym, message))
     calls = reply.tool_calls
-    called = tuple(c.name or "?" for c in calls)
+    called = tuple(_brief(c.name or "?") for c in calls)
     visible, inline_reasoning = split_think(reply.content)
     for c in calls:
-        if c.name not in TOOL_SCHEMAS: _add(HALLUCINATED_TOOL, f"called unknown tool {c.name!r}")
+        if c.name not in TOOL_SCHEMAS: _add(HALLUCINATED_TOOL, f"called unknown tool {_brief(c.name or '?')!r}")
         elif c.error: _add(MALFORMED_TOOL_ARGS, f"{c.name}: {c.error}")
         elif errs := validate(TOOL_SCHEMAS[c.name], c.arguments): _add(MALFORMED_TOOL_ARGS, f"{c.name}: {errs[0]}")
-    if not calls and has_tool_markup(reply.content or ""):
+    if not calls and has_tool_markup(visible):
         _add(TEMPLATE_LEAK, "tool-call markup in reply text")
     if case.expected:
         if not calls and TEMPLATE_LEAK not in symptoms:
@@ -417,19 +421,28 @@ evaluate_case(case, reply):
         elif case.parallel and 0 < len(calls) < len(case.expected):
             _add(NO_PARALLEL_CALLS, f"expected {len(case.expected)} tool calls in one turn, got {len(calls)}")
         elif calls and not _calls_match(case.expected, calls):
-            _add(WRONG_TOOL, f"expected {names(case)}, got {', '.join(called)}")
+            if sorted(c.name or "?" for c in calls) == sorted(names(case)):
+                _add(WRONG_TOOL, f"expected {names(case)} with the expected argument hints, got {', '.join(called)}")
+            else:
+                _add(WRONG_TOOL, f"expected {names(case)}, got {', '.join(called)}")
     else:
         allowed = [c for c in calls if case.refusal and c.name == "clarify"]
         stray = [c for c in calls if c not in allowed and c.name in TOOL_SCHEMAS]
         if stray:
             _add(TOOL_CHOICE_IGNORED if case.tool_choice == "none" else WRONG_TOOL,
                  "tool_choice none was ignored" if case.tool_choice == "none"
-                 else f"expected no tool call, got {', '.join(c.name for c in stray)}")
+                 else f"expected no tool call, got {', '.join(_brief(c.name or '?') for c in stray)}")
         if not calls and not visible and TEMPLATE_LEAK not in symptoms:
             _add(_silent_symptom(reply, visible, inline_reasoning), "no text and no tool call")
     passed = not symptoms
     detail = "ok" if passed else "; ".join(messages)
     return CaseResult(case.id, case.title, passed, tuple(symptoms), detail, called)
+
+_brief(text):
+    replace control characters and runs of whitespace with single spaces (" ".join after
+    mapping [\x00-\x1f\x7f] to spaces); if the result is longer than 80 characters, keep the
+    first 80 and append the "…" character. Applied to every model-supplied tool name embedded
+    in detail messages and to the called tuple stored in CaseResult.
 
 _silent_symptom(reply, visible, inline_reasoning):
     if (reply.reasoning or "").strip() or inline_reasoning: return THOUGHT_RUNAWAY
