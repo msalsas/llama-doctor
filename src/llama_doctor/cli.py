@@ -14,6 +14,7 @@ from .render.jsondoc import diagnosis_document
 from .render.terminal import render_report, use_color
 
 EXIT_TOOL_ERROR = 3
+AGENTCHECK_TIMEOUT = 300.0
 
 
 class _ArgumentParser(argparse.ArgumentParser):
@@ -70,6 +71,16 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--ram-gib", type=float, metavar="N")
     serve_parser.add_argument("--weights-gib", type=float, metavar="N")
     serve_parser.add_argument("--no-slots", action="store_true")
+
+    agentcheck_parser = commands.add_parser("agentcheck")
+    agentcheck_parser.add_argument("url", metavar="URL")
+    agentcheck_parser.add_argument("--json", action="store_true")
+    agentcheck_parser.add_argument("--api-key-env", metavar="VAR")
+    agentcheck_parser.add_argument(
+        "--timeout", type=_positive_float, default=AGENTCHECK_TIMEOUT, metavar="SEC"
+    )
+    agentcheck_parser.add_argument("--replays", type=_positive_int, default=6, metavar="N")
+    agentcheck_parser.add_argument("--max-tokens", type=_positive_int, default=512, metavar="N")
     return parser
 
 
@@ -96,6 +107,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     client = _client(args)
     if client is None:
         return EXIT_TOOL_ERROR
+    if args.command == "agentcheck":
+        from llama_doctor.agentcheck import AgentCheckError, run_agentcheck
+
+        try:
+            return run_agentcheck(
+                client,
+                replays=args.replays,
+                max_tokens=args.max_tokens,
+                as_json=args.json,
+                out=sys.stdout,
+                err=sys.stderr,
+            )
+        except AgentCheckError as exc:
+            print(f"llama-doctor: {exc}", file=sys.stderr)
+            return EXIT_TOOL_ERROR
     if args.command == "serve":
         from llama_doctor.dashboard.server import run
 
