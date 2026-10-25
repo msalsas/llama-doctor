@@ -4,7 +4,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from .models import (
@@ -122,6 +122,12 @@ class LlamaClient:
             raise FetchError(path, "invalid JSON") from None
         except RecursionError:
             raise FetchError(path, "invalid response") from None
+
+    def get_json(self, path: str) -> Any:
+        return self._fetch_json(path)
+
+    def post_json(self, path: str, payload: Mapping[str, Any]) -> Any:
+        return self._fetch_json(path, data=json.dumps(payload).encode("utf-8"))
 
     def fetch_metrics(self) -> MetricsSnapshot:
         body = self._fetch_bytes("/metrics")
