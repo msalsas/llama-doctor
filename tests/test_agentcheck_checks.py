@@ -132,6 +132,13 @@ class TestEvaluateCase(unittest.TestCase):
                                                 "</tool_call>"))
         self.assertIn(Symptom.TEMPLATE_LEAK, leaked.symptoms)
 
+    def test_markup_inside_think_block_is_not_template_leak(self):
+        case = CASES_BY_ID["tool_choice_none"]
+        content = "<think>planning a <tool_call>{\"name\": \"read_file\"}</tool_call></think>"
+        result = evaluate_case(case, make_reply(content=content))
+        self.assertNotIn(Symptom.TEMPLATE_LEAK, result.symptoms)
+        self.assertIn(Symptom.THOUGHT_RUNAWAY, result.symptoms)
+
     def test_wrong_argument_type_names_path(self):
         case = CASES_BY_ID["args_integer"]
         calls = (ToolCall("c1", "web_search", {"query": "reasoning budget",

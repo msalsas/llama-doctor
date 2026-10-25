@@ -206,7 +206,7 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             _add(Symptom.MALFORMED_TOOL_ARGS, f"{call.name}: {call.error}")
         elif errors := validate(TOOL_SCHEMAS[call.name], call.arguments):
             _add(Symptom.MALFORMED_TOOL_ARGS, f"{call.name}: {errors[0]}")
-    if not calls and has_tool_markup(reply.content or ""):
+    if not calls and has_tool_markup(visible):
         _add(Symptom.TEMPLATE_LEAK, "tool-call markup in reply text")
     if case.expected:
         if not calls and Symptom.TEMPLATE_LEAK not in symptoms:
