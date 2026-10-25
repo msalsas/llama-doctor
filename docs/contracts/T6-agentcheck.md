@@ -351,8 +351,9 @@ detect_family(client):
     if props_err and models_err and props_err.status is None and models_err.status is None
        and props_err.reason in UNREACHABLE_REASONS and models_err.reason in UNREACHABLE_REASONS:
         raise AgentCheckError(f"server unreachable (/props: {props_err.reason}, /v1/models: {models_err.reason})")
-    model_id = raw "id" of the loaded:true /v1/models entry (first entry if none is loaded:true),
-               None unless it is a str; never ModelsMeta.safe_str, which truncates at 128 chars
+    model_id = "id" of the loaded:true /v1/models entry (first entry if none is loaded:true),
+               None unless it is a non-empty str; remove characters with ord < 0x20 or ord == 0x7f,
+               cap at 512 characters, then return None if it is empty
     marker = _strata_marker(models)
     if marker: return ServerFamily(STRATA, marker, model_id, None)
     if isinstance(props, dict):
@@ -372,8 +373,8 @@ _strata_marker(models):
 Notes:
 - A `/props` 200 with a non-JSON body (for example an HTML proxy page) raises `FetchError("invalid JSON")` with status None. That counts as **not** llama.cpp and detection falls through to the Strata check.
 - Detection never infers a family from the model name or the port.
-- `model_id` is the raw entry id, so ids longer than 128 characters are sent intact in chat
-  payloads; the report displays it as-is.
+- The payload receives the selected model id with control characters removed and a 512-character
+  cap; it is `None` when the entry id is absent, not a string, or empty after cleaning.
 
 ### 2.2 Error policy (applies to every chat request)
 
@@ -385,6 +386,11 @@ non-fatal -> recorded on the case or replay as REQUEST_ERROR / Outcome.ERROR wit
 ```
 
 Non-fatal errors are: timed out, HTTP 400/413/5xx, and response too large.
+
+The agentcheck CLI dispatch also catches `Exception`, prints
+`llama-doctor: unexpected error: Type: message`, and exits 3. agentcheck never exits 1
+outside its verdict taxonomy; stable exit codes let agents distinguish a warning verdict from
+an operational failure.
 
 ### 2.3 Phase A: tool-call conformance
 
@@ -407,7 +413,7 @@ run_conformance(chat):
 evaluate_case(case, reply):
     symptoms = []   (ordered, no duplicates; use _add(sym, message))
     calls = reply.tool_calls
-    called = tuple(_brief(c.name or "?") for c in calls)
+    called = tuple(c.name or "?" for c in calls)
     visible, inline_reasoning = split_think(reply.content)
     for c in calls:
         if c.name not in TOOL_SCHEMAS: _add(HALLUCINATED_TOOL, f"called unknown tool {_brief(c.name or '?')!r}")
@@ -422,7 +428,12 @@ evaluate_case(case, reply):
             _add(NO_PARALLEL_CALLS, f"expected {len(case.expected)} tool calls in one turn, got {len(calls)}")
         elif calls and not _calls_match(case.expected, calls):
             if sorted(c.name or "?" for c in calls) == sorted(names(case)):
-                _add(WRONG_TOOL, f"expected {names(case)} with the expected argument hints, got {', '.join(called)}")
+                hints = "; ".join(
+                    f"{key}~{value!r}" if isinstance(value, str) else f"{key}=={value}"
+                    for exp in case.expected
+                    for key, value in exp.args.items()
+                )
+                _add(WRONG_TOOL, f"expected {names(case)} with arguments {hints}, got {', '.join(called)}")
             else:
                 _add(WRONG_TOOL, f"expected {names(case)}, got {', '.join(called)}")
     else:
@@ -442,7 +453,11 @@ _brief(text):
     replace control characters and runs of whitespace with single spaces (" ".join after
     mapping [\x00-\x1f\x7f] to spaces); if the result is longer than 80 characters, keep the
     first 80 and append the "…" character. Applied to every model-supplied tool name embedded
-    in detail messages and to the called tuple stored in CaseResult.
+    in detail messages. CaseResult.called retains raw names (or "?"). The text report applies
+    _brief to every called entry; the JSON report keeps raw names, relying on JSON escaping.
+
+WRONG_TOOL argument hints use `key~'str'` for string constraints and `key==value` for integer
+constraints, joined with `; ` across expected calls.
 
 _silent_symptom(reply, visible, inline_reasoning):
     if (reply.reasoning or "").strip() or inline_reasoning: return THOUGHT_RUNAWAY
@@ -740,7 +755,7 @@ SEARCH_RESULT = (
 )
 ```
 
-**Sizes.** Start with `SYSTEM_FILLER_WORDS = 2000` and `RESULT_FILLER_WORDS = 2400`. Each turn's `len(json.dumps(messages)) + len(json.dumps(TOOL_CATALOG))` must land between **32,000 and 40,000 characters**, which is 8–10k tokens at roughly 4 characters per token. Tune both constants until the size test passes near 36,000. The report prints the real `usage.prompt_tokens`, so users can see the actual size.
+**Sizes.** Use `SYSTEM_FILLER_WORDS = 2600` and `RESULT_FILLER_WORDS = 3100`. Each turn's `len(json.dumps(messages)) + len(json.dumps(TOOL_CATALOG))` must land between **38,000 and 46,000 characters**, which is 8–10k tokens at roughly 4 characters per token. The report prints the real `usage.prompt_tokens`, so users can see the actual size.
 
 ## 5. CLI changes (`cli.py`)
 
@@ -750,7 +765,10 @@ Add a module constant after `EXIT_TOOL_ERROR`:
 AGENTCHECK_TIMEOUT = 300.0
 ```
 
-If `_positive_int` and `_positive_float` do not already exist in `cli.py`, add them above `build_parser` (argparse `type=` callables raising `argparse.ArgumentTypeError` for values <= 0). Do not apply them to `serve` or `diagnose` flags in this branch.
+`_positive_float` rejects values less than or equal to zero and non-finite `inf`/`nan` values.
+`_positive_int` rejects only values less than or equal to zero. Both are argparse `type=`
+callables that raise `argparse.ArgumentTypeError`. Do not apply them to `serve` or `diagnose`
+flags in this branch.
 
 In `build_parser`, after the `serve_parser` block and before `return parser`:
 
@@ -762,7 +780,7 @@ In `build_parser`, after the `serve_parser` block and before `return parser`:
     agentcheck_parser.add_argument(
         "--timeout", type=_positive_float, default=AGENTCHECK_TIMEOUT, metavar="SEC"
     )
-    agentcheck_parser.add_argument("--replays", type=_positive_int, default=6, metavar="N")
+    agentcheck_parser.add_argument("--replays", type=_replay_count, default=6, metavar="N")
     agentcheck_parser.add_argument("--max-tokens", type=_positive_int, default=512, metavar="N")
 ```
 
@@ -784,10 +802,14 @@ In `main`, right after `if client is None: return EXIT_TOOL_ERROR`:
         except AgentCheckError as exc:
             print(f"llama-doctor: {exc}", file=sys.stderr)
             return EXIT_TOOL_ERROR
+        except Exception as exc:
+            print(f"llama-doctor: unexpected error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return EXIT_TOOL_ERROR
 ```
 
 Flag notes:
 - `--max-tokens` applies to phase B only. Phase A uses `CONFORMANCE_MAX_TOKENS = 2048`, so a reasoning model is not marked down in tool selection just for thinking.
+- `--replays` accepts at most 50.
 - There is no `--no-slots` flag, because agentcheck never reads `/slots`.
 
 ## 6. Report output
@@ -803,7 +825,7 @@ model: Qwen3-30B-A3B
 tool-call conformance: 9/10 WARN
   PASS select_read_file
   ...
-  FAIL parallel_calls: expected 2 tool calls in one turn, got 1
+  FAIL parallel_calls: expected 2 tool calls in one turn, got 1 (called: read_file)
 
 empty-turn detector: 17/18 actionable FAIL
   fix_failing_test: 5 actionable, 1 empty (prompt 9104 tokens)
@@ -826,6 +848,7 @@ Formatting rules:
 - With no remedies, print `remediation: none needed`.
 - For the unknown family, the header is `remediation (unknown server family: generic advice only)` and no `fix:` lines appear.
 - A remedy with `fix is None` prints no `fix:` line.
+- Text rendering applies `_brief` to every `CaseResult.called` entry; JSON keeps the raw names.
 - There is no ANSI colour.
 
 ### 6.2 JSON (`agentcheck_document`)
@@ -876,7 +899,7 @@ Verdict values are lowercase names. Model text is never included, only counts an
 8. There are 10 conformance cases with unique ids. Every expected tool is in the catalog, and every expected arg set passes `validate` against that tool's schema.
 9. The sentence pool follows every rule: 48 sentences, 10–18 words, ASCII, no digits or banned characters or words, no tool names.
 10. `filler` is deterministic and seed-sensitive. Its word count is at least the requested count and less than the request plus 18.
-11. Each agentic turn's size is within 32,000–40,000 characters and ends with a `tool` message. Every `tool_call_id` matches an earlier call id, and the turn ids are unique.
+11. Each agentic turn's size is within 38,000–46,000 characters and ends with a `tool` message. Every `tool_call_id` matches an earlier call id, and the turn ids are unique.
 12. The corpus is identical across processes: a subprocess with `PYTHONHASHSEED=1` and `PYTHONPATH=src` produces the same sha256 of the corpus JSON.
 
 **test_agentcheck_chat.py**
@@ -934,7 +957,7 @@ Verdict values are lowercase names. Model text is never included, only counts an
 48. One EMPTY replay exits 2.
 49. `/props` 200 followed by 401 on `/v1/chat/completions` exits 3. Stderr mentions HTTP 401 and contains no traceback.
 50. A 200 non-JSON body on `/v1/chat/completions` exits 3 with "invalid JSON".
-51. Bad arguments exit 3: `--timeout 0`, `--timeout -1`, `--replays 0`, `--max-tokens abc`. An unset `--api-key-env` also exits 3, while a set one sends the Authorization header on chat requests.
+51. Bad arguments exit 3: `--timeout 0`, `--timeout -1`, `--timeout inf`, `--timeout nan`, a 400-digit `--timeout`, `--replays 0`, `--replays 51`, and `--max-tokens abc`. The 400-digit timeout is an argparse-style error without a traceback. An unset `--api-key-env` also exits 3, while a set one sends the Authorization header on chat requests.
 52. `--json --replays 2`: stdout parses as JSON, `exit_code` equals the return code, the server saw 10 + 3×2 chat requests, and phase B payloads have `max_tokens == 512`.
 
 Also add exit-matrix subtests over all 9 verdict pairs → `AgentCheckResult.exit_code`, which can live in `test_agentcheck_checks.py`.
@@ -979,7 +1002,7 @@ CLI reference block:
 | Flag | Effect |
 | --- | --- |
 | `--json` | Print the result as JSON instead of text. |
-| `--replays N` | Replays per synthetic agent turn in the empty-turn check (default `6`). |
+| `--replays N` | Replays per synthetic agent turn in the empty-turn check (default `6`, maximum `50`). |
 | `--max-tokens N` | Token limit for each empty-turn replay (default `512`); conformance cases use 2048. |
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
 | `--timeout SEC` | HTTP timeout per request, greater than 0 (default `300`). |

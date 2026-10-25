@@ -2,7 +2,7 @@ from typing import Any
 
 from llama_doctor import __version__
 
-from .checks import AgentCheckResult, Outcome
+from .checks import AgentCheckResult, Outcome, _brief
 from .family import Family
 
 _OUTCOME_ORDER = (
@@ -31,7 +31,10 @@ def render_text(result: AgentCheckResult, *, target: str) -> str:
         if case.passed:
             lines.append(f"  PASS {case.case_id}")
         else:
-            lines.append(f"  FAIL {case.case_id}: {case.detail}")
+            called = ""
+            if case.called:
+                called = f" (called: {', '.join(_brief(name) for name in case.called)})"
+            lines.append(f"  FAIL {case.case_id}: {case.detail}{called}")
     lines.append("")
     empty = result.empty_turn
     if empty.skipped is not None:

@@ -3,7 +3,7 @@ import json
 import time
 import unittest
 
-from llama_doctor.agentcheck.cases import CONFORMANCE_CASES
+from llama_doctor.agentcheck.cases import CONFORMANCE_CASES, ConformanceCase, ExpectedCall
 from llama_doctor.agentcheck.chat import ChatClient, ChatReply, ToolCall
 from llama_doctor.agentcheck.checks import (
     MIN_REPLAY_CTX,
@@ -26,6 +26,7 @@ from llama_doctor.agentcheck.checks import (
 )
 from llama_doctor.agentcheck.family import Family, ServerFamily
 from llama_doctor.agentcheck.remediation import Symptom
+from llama_doctor.agentcheck.report import render_text
 from llama_doctor.client import LlamaClient
 
 from .agentcheck_fakes import agent_server, perfect_reply, reply
@@ -111,17 +112,29 @@ class TestEvaluateCase(unittest.TestCase):
         result = evaluate_case(case, make_reply(tool_calls=calls))
         self.assertIn(Symptom.HALLUCINATED_TOOL, result.symptoms)
 
-    def test_long_tool_name_is_briefed_in_detail_and_called(self):
+    def test_long_tool_name_is_raw_in_called_and_briefed_in_text_report(self):
         case = CASES_BY_ID["tool_choice_auto_no_tool"]
         name = "bad\x00tool\n" + "x" * 5000
         calls = (ToolCall("c1", name, None, None),)
         result = evaluate_case(case, make_reply(tool_calls=calls))
         self.assertIn(Symptom.HALLUCINATED_TOOL, result.symptoms)
         self.assertLess(len(result.detail), 200)
-        self.assertEqual(result.called, ("bad tool " + "x" * 71 + "…",))
+        self.assertEqual(result.called, (name,))
         self.assertTrue(all(ord(char) >= 32 and ord(char) != 127 for char in result.detail))
-        for entry in result.called:
-            self.assertTrue(all(ord(char) >= 32 and ord(char) != 127 for char in entry))
+        self.assertIn("bad tool " + "x" * 71 + "…", result.detail)
+        report = render_text(
+            AgentCheckResult(
+                ServerFamily(Family.UNKNOWN, "evidence", None, None),
+                ConformanceResult((result,)),
+                EmptyTurnResult(()),
+                (),
+            ),
+            target="http://x",
+        )
+        self.assertIn("called: bad tool " + "x" * 71 + "…", report)
+        self.assertTrue(
+            all(char == chr(10) or (ord(char) >= 32 and ord(char) != 127) for char in report)
+        )
 
     def test_tool_choice_none(self):
         case = CASES_BY_ID["tool_choice_none"]
@@ -178,6 +191,27 @@ class TestEvaluateCase(unittest.TestCase):
         self.assertEqual(
             result.detail,
             "expected read_file with arguments path~'src/app/main.py', got read_file",
+        )
+
+    def test_wrong_arguments_for_two_matching_calls_join_hints_with_semicolon(self):
+        case = ConformanceCase(
+            "two_read_files",
+            "Read two files",
+            "Read two files.",
+            (
+                ExpectedCall("read_file", {"path": "first.py"}),
+                ExpectedCall("read_file", {"path": "second.py"}),
+            ),
+        )
+        calls = (
+            ToolCall("c1", "read_file", {"path": "wrong-one.py"}, None),
+            ToolCall("c2", "read_file", {"path": "wrong-two.py"}, None),
+        )
+        result = evaluate_case(case, make_reply(tool_calls=calls))
+        self.assertEqual(
+            result.detail,
+            "expected read_file, read_file with arguments path~'first.py'; "
+            "path~'second.py', got read_file, read_file",
         )
 
 

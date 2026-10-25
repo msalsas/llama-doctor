@@ -36,7 +36,7 @@ def _positive_int(value: str) -> int:
         number = int(value)
     except ValueError:
         raise argparse.ArgumentTypeError("must be an integer > 0") from None
-    if not math.isfinite(number) or number <= 0:
+    if number <= 0:
         raise argparse.ArgumentTypeError("must be > 0")
     return number
 
@@ -131,7 +131,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"llama-doctor: {exc}", file=sys.stderr)
             return EXIT_TOOL_ERROR
         except Exception as exc:  # noqa: BLE001
-            print(f"llama-doctor: unexpected error: {exc}", file=sys.stderr)
+            print(
+                f"llama-doctor: unexpected error: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
             return EXIT_TOOL_ERROR
     if args.command == "serve":
         from llama_doctor.dashboard.server import run

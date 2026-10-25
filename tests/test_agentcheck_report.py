@@ -82,6 +82,33 @@ class TestRenderText(unittest.TestCase):
         text = render_text(clean, target="http://x")
         self.assertIn("remediation: none needed", text)
 
+    def test_called_names_are_briefed_in_text_but_raw_in_json(self):
+        raw_name = "bad\x00tool\n" + "x" * 5000
+        result = build_result(LLAMA_FAMILY)
+        failed = result.conformance.cases[6]
+        cases = (
+            *result.conformance.cases[:6],
+            CaseResult(
+                failed.case_id,
+                failed.title,
+                failed.passed,
+                failed.symptoms,
+                failed.detail,
+                (raw_name,),
+            ),
+            *result.conformance.cases[7:],
+        )
+        updated = AgentCheckResult(
+            result.family, ConformanceResult(cases), result.empty_turn, result.remedies
+        )
+        text = render_text(updated, target="http://x")
+        self.assertIn("called: bad tool " + "x" * 71 + "…", text)
+        self.assertTrue(
+            all(char == chr(10) or (ord(char) >= 32 and ord(char) != 127) for char in text)
+        )
+        document = agentcheck_document(updated, target="http://x")
+        self.assertEqual(document["conformance"]["cases"][6]["called"], [raw_name])
+
 
 class TestAgentcheckDocument(unittest.TestCase):
     def test_document_structure(self):

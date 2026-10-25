@@ -77,7 +77,7 @@ class TestDetectFamily(unittest.TestCase):
             family = detect_family(make_client(server.url))
         self.assertEqual(family.name, Family.STRATA)
 
-    def test_long_model_id_sent_intact_in_chat_payload(self):
+    def test_model_id_with_200_characters_sent_intact_in_chat_payload(self):
         long_id = "m" * 200
         with agent_server(models={"data": [{"id": long_id}]}) as server:
             family = detect_family(make_client(server.url))
@@ -87,6 +87,33 @@ class TestDetectFamily(unittest.TestCase):
         self.assertEqual(family.model_id, long_id)
         payload = json.loads(server.requests[-1][3])
         self.assertEqual(payload["model"], long_id)
+
+    def test_model_id_strips_controls_and_is_capped_in_chat_payload(self):
+        control_id = "model\x1b[31m\nname"
+        with agent_server(models={"data": [{"id": control_id}]}) as server:
+            family = detect_family(make_client(server.url))
+            chat = ChatClient(make_client(server.url), family.model_id)
+            chat.chat(
+                [{"role": "user", "content": CONFORMANCE_CASES[0].prompt}],
+                [],
+                max_tokens=32,
+            )
+        self.assertEqual(family.model_id, "model[31mname")
+        payload = json.loads(server.requests[-1][3])
+        self.assertEqual(payload["model"], "model[31mname")
+
+        long_id = "m" * 1000
+        with agent_server(models={"data": [{"id": long_id}]}) as server:
+            family = detect_family(make_client(server.url))
+            chat = ChatClient(make_client(server.url), family.model_id)
+            chat.chat(
+                [{"role": "user", "content": CONFORMANCE_CASES[0].prompt}],
+                [],
+                max_tokens=32,
+            )
+        self.assertEqual(family.model_id, "m" * 512)
+        payload = json.loads(server.requests[-1][3])
+        self.assertEqual(payload["model"], "m" * 512)
 
     def test_auth_error_raises(self):
         with FakeLlamaServer() as server:

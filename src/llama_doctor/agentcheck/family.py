@@ -79,7 +79,12 @@ def _raw_model_id(models: Any) -> str | None:
         return None
     entry = next((item for item in entries if item.get("loaded") is True), entries[0])
     model_id = entry.get("id")
-    return model_id if isinstance(model_id, str) else None
+    if not isinstance(model_id, str) or not model_id:
+        return None
+    cleaned = "".join(
+        char for char in model_id if ord(char) >= 0x20 and ord(char) != 0x7F
+    )[:512]
+    return cleaned or None
 
 
 def _strata_marker(models: Any) -> str | None:

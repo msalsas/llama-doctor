@@ -112,7 +112,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 `llama-doctor agentcheck URL` tests whether the model behind an OpenAI-compatible endpoint can drive a coding agent. It sends greedy (`temperature 0`) requests to `/v1/chat/completions` and reports three things:
 
 - **Tool-call conformance.** Ten single-turn cases against a fixed 15-tool catalog: correct tool selection, arguments that validate against each tool's JSON Schema (type, properties, required, enum), two calls in one turn, a polite refusal when asked for a tool that does not exist, and correct behaviour for `tool_choice` `auto` and `none`. The score is shown out of 10.
-- **Empty-turn detection.** Three synthetic agent turns of 8–10k prompt tokens (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
+- **Empty-turn detection.** Three synthetic agent turns (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. The corpus lands around 8-10k prompt tokens measured on a Strata server; llama.cpp tokenizers may split somewhat higher. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
 - **Remediation.** Each symptom found is mapped to concrete settings for the detected server family.
 
 The server family is detected before any check runs. Strata markers in `GET /v1/models` entries — `meta.instanceId` or `owned_by` Strata — are checked first and mean the Strata family; then a `GET /props` that returns 200 means the llama.cpp family. Anything else is reported as unknown and gets generic advice only.
@@ -165,7 +165,7 @@ In `diagnose`, `--probe` is off by default and is the only option that sends a w
 | Flag | Effect |
 | --- | --- |
 | `--json` | Print the result as JSON instead of text. |
-| `--replays N` | Replays per synthetic agent turn in the empty-turn check (default `6`). |
+| `--replays N` | Replays per synthetic agent turn in the empty-turn check (default `6`, maximum `50`). |
 | `--max-tokens N` | Token limit for each empty-turn replay (default `512`); conformance cases use 2048. |
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
 | `--timeout SEC` | HTTP timeout per request, greater than 0 (default `300`). |

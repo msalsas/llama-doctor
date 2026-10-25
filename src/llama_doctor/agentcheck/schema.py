@@ -2,6 +2,16 @@ from collections.abc import Mapping
 from typing import Any
 
 
+def _brief(text: str) -> str:
+    cleaned = "".join(
+        char if ord(char) >= 0x20 and ord(char) != 0x7F else " " for char in text
+    ).split()
+    result = " ".join(cleaned)
+    if len(result) > 80:
+        return result[:80] + "…"
+    return result
+
+
 def validate(schema: Mapping[str, Any], value: Any, path: str = "$") -> list[str]:
     """Return validation errors for the type/properties/required/enum subset of JSON Schema."""
     if not isinstance(schema, Mapping):
@@ -18,7 +28,7 @@ def validate(schema: Mapping[str, Any], value: Any, path: str = "$") -> list[str
         errors.append(f"{path}: expected {'/'.join(type_names)}, got {type(value).__name__}")
     enum = schema.get("enum")
     if isinstance(enum, list) and value not in enum:
-        errors.append(f"{path}: {value!r} not in enum")
+        errors.append(f"{path}: {_brief(repr(value))} not in enum")
     if not isinstance(value, Mapping):
         return errors
     required = schema.get("required")

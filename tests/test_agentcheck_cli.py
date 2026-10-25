@@ -72,6 +72,7 @@ class TestAgentcheckCli(unittest.TestCase):
             ["agentcheck", "http://127.0.0.1:9", "--timeout", "-1"],
             ["agentcheck", "http://127.0.0.1:9", "--timeout", "inf"],
             ["agentcheck", "http://127.0.0.1:9", "--timeout", "nan"],
+            ["agentcheck", "http://127.0.0.1:9", "--timeout", "9" * 400],
             ["agentcheck", "http://127.0.0.1:9", "--replays", "0"],
             ["agentcheck", "http://127.0.0.1:9", "--max-tokens", "abc"],
         ]
@@ -84,6 +85,17 @@ class TestAgentcheckCli(unittest.TestCase):
                     main(args)
                 self.assertEqual(raised.exception.code, 3)
 
+    def test_huge_timeout_is_an_argparse_error_without_traceback(self):
+        stderr = io.StringIO()
+        with (
+            contextlib.redirect_stderr(stderr),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            main(["agentcheck", "http://127.0.0.1:9", "--timeout", "9" * 400])
+        self.assertEqual(raised.exception.code, 3)
+        self.assertIn("agentcheck: error:", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_unexpected_error_exits_three_without_traceback(self):
         def boom(*args, **kwargs):
             raise RuntimeError("synthetic crash")
@@ -94,7 +106,7 @@ class TestAgentcheckCli(unittest.TestCase):
         ):
             code, _, stderr = run_cli(["agentcheck", server.url])
         self.assertEqual(code, 3)
-        self.assertIn("llama-doctor: unexpected error: synthetic crash", stderr)
+        self.assertIn("llama-doctor: unexpected error: RuntimeError: synthetic crash", stderr)
         self.assertNotIn("Traceback", stderr)
 
     def test_replays_capped_at_fifty(self):

@@ -197,7 +197,7 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             messages.append(message)
 
     calls = reply.tool_calls
-    called = tuple(_brief(call.name or "?") for call in calls)
+    called = tuple(call.name or "?" for call in calls)
     visible, inline_reasoning = split_think(reply.content)
     for call in calls:
         if call.name not in TOOL_SCHEMAS:
