@@ -88,9 +88,11 @@ class TestAgentcheckCli(unittest.TestCase):
         def boom(*args, **kwargs):
             raise RuntimeError("synthetic crash")
 
-        with agent_server() as server:
-            with mock.patch.object(agentcheck, "run_agentcheck", boom):
-                code, _, stderr = run_cli(["agentcheck", server.url])
+        with (
+            agent_server() as server,
+            mock.patch.object(agentcheck, "run_agentcheck", boom),
+        ):
+            code, _, stderr = run_cli(["agentcheck", server.url])
         self.assertEqual(code, 3)
         self.assertIn("llama-doctor: unexpected error: synthetic crash", stderr)
         self.assertNotIn("Traceback", stderr)
