@@ -3,7 +3,9 @@ import io
 import json
 import os
 import unittest
+from unittest import mock
 
+from llama_doctor import agentcheck
 from llama_doctor.cli import main
 
 from .agentcheck_fakes import ChatResponder, agent_server, call, reply
@@ -79,6 +81,17 @@ class TestAgentcheckCli(unittest.TestCase):
                 ):
                     main(args)
                 self.assertEqual(raised.exception.code, 3)
+
+    def test_unexpected_error_exits_three_without_traceback(self):
+        def boom(*args, **kwargs):
+            raise RuntimeError("synthetic crash")
+
+        with agent_server() as server:
+            with mock.patch.object(agentcheck, "run_agentcheck", boom):
+                code, _, stderr = run_cli(["agentcheck", server.url])
+        self.assertEqual(code, 3)
+        self.assertIn("llama-doctor: unexpected error: synthetic crash", stderr)
+        self.assertNotIn("Traceback", stderr)
 
     def test_unset_api_key_env_exits_three(self):
         os.environ.pop("LLAMA_DOCTOR_AGENTCHECK_TEST_KEY", None)

@@ -122,6 +122,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         except AgentCheckError as exc:
             print(f"llama-doctor: {exc}", file=sys.stderr)
             return EXIT_TOOL_ERROR
+        except Exception as exc:
+            print(f"llama-doctor: unexpected error: {exc}", file=sys.stderr)
+            return EXIT_TOOL_ERROR
     if args.command == "serve":
         from llama_doctor.dashboard.server import run
 
