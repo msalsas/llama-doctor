@@ -115,7 +115,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 - **Empty-turn detection.** Three synthetic agent turns of 8–10k prompt tokens (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
 - **Remediation.** Each symptom found is mapped to concrete settings for the detected server family.
 
-The server family is detected before any check runs. A `GET /props` that returns 200 means the llama.cpp family. Otherwise, `GET /v1/models` entries with `meta.instanceId` or `owned_by` Strata mean the Strata family. Anything else is reported as unknown and gets generic advice only.
+The server family is detected before any check runs. Strata markers in `GET /v1/models` entries — `meta.instanceId` or `owned_by` Strata — are checked first and mean the Strata family; then a `GET /props` that returns 200 means the llama.cpp family. Anything else is reported as unknown and gets generic advice only.
 
 | Symptom | llama.cpp family | Strata family (config keys) |
 | --- | --- | --- |
