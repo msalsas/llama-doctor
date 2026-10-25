@@ -177,7 +177,7 @@ class TestEvaluateCase(unittest.TestCase):
         self.assertIn(Symptom.WRONG_TOOL, result.symptoms)
         self.assertEqual(
             result.detail,
-            "expected read_file with the expected argument hints, got read_file",
+            "expected read_file with arguments path~'src/app/main.py', got read_file",
         )
 
 

@@ -225,9 +225,14 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             if sorted(exp.name for exp in case.expected) == sorted(
                 call.name or "?" for call in calls
             ):
+                hints = "; ".join(
+                    f"{key}~{value!r}" if isinstance(value, str) else f"{key}=={value}"
+                    for exp in case.expected
+                    for key, value in exp.args.items()
+                )
                 _add(
                     Symptom.WRONG_TOOL,
-                    f"expected {expected_names} with the expected argument hints, "
+                    f"expected {expected_names} with arguments {hints}, "
                     f"got {', '.join(called)}",
                 )
             else:
