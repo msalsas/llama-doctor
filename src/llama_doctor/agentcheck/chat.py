@@ -53,7 +53,7 @@ def _parse_call(raw: Mapping[str, Any]) -> ToolCall:
     if isinstance(arguments, str):
         try:
             parsed = json.loads(arguments)
-        except ValueError:
+        except (ValueError, RecursionError):
             return ToolCall(call_id, name, None, "arguments are not valid JSON")
         if not isinstance(parsed, dict):
             return ToolCall(call_id, name, None, "arguments are not a JSON object")

@@ -44,6 +44,14 @@ class TestParseReply(unittest.TestCase):
         result = parse_reply(make_reply(tool_calls=[raw_call]))
         self.assertEqual(result.tool_calls[0].error, "arguments are not valid JSON")
 
+    def test_deeply_nested_arguments_set_error(self):
+        raw_call = {"id": "c1", "type": "function",
+                    "function": {"name": "read_file",
+                                 "arguments": "[" * 4000 + "]" * 4000}}
+        result = parse_reply(make_reply(tool_calls=[raw_call]))
+        self.assertIsNone(result.tool_calls[0].arguments)
+        self.assertTrue(result.tool_calls[0].error)
+
     def test_non_object_arguments_set_error(self):
         raw_call = {"id": "c1", "type": "function",
                     "function": {"name": "read_file", "arguments": "[1, 2]"}}
