@@ -150,6 +150,15 @@ _MARKUP = re.compile(
     r'|"name"\s*:\s*"(?:' + "|".join(TOOL_NAMES) + r')"'
 )
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _brief(text: str) -> str:
+    cleaned = " ".join(_CONTROL_CHARS.sub(" ", text).split())
+    if len(cleaned) > 80:
+        return cleaned[:80] + "…"
+    return cleaned
+
 
 def split_think(text: str | None) -> tuple[str, str]:
     if text is None:
@@ -188,11 +197,11 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             messages.append(message)
 
     calls = reply.tool_calls
-    called = tuple(call.name or "?" for call in calls)
+    called = tuple(_brief(call.name or "?") for call in calls)
     visible, inline_reasoning = split_think(reply.content)
     for call in calls:
         if call.name not in TOOL_SCHEMAS:
-            _add(Symptom.HALLUCINATED_TOOL, f"called unknown tool {call.name!r}")
+            _add(Symptom.HALLUCINATED_TOOL, f"called unknown tool {_brief(call.name or '?')!r}")
         elif call.error:
             _add(Symptom.MALFORMED_TOOL_ARGS, f"{call.name}: {call.error}")
         elif errors := validate(TOOL_SCHEMAS[call.name], call.arguments):
@@ -221,7 +230,7 @@ def evaluate_case(case: ConformanceCase, reply: ChatReply) -> CaseResult:
             if case.tool_choice == "none":
                 _add(Symptom.TOOL_CHOICE_IGNORED, "tool_choice none was ignored")
             else:
-                names = ", ".join(call.name for call in stray)
+                names = ", ".join(_brief(call.name or "?") for call in stray)
                 _add(Symptom.WRONG_TOOL, f"expected no tool call, got {names}")
         if not calls and not visible and Symptom.TEMPLATE_LEAK not in symptoms:
             _add(_silent_symptom(reply, visible, inline_reasoning), "no text and no tool call")
