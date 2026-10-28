@@ -40,11 +40,11 @@ PYTHONPATH=src python3 -m llama_doctor diagnose http://127.0.0.1:8080
 
 Point it at a running server. A plain llama.cpp server needs only the URL (for example `http://127.0.0.1:8080`); wrappers that require an API key, such as Unsloth Studio, take it from an environment variable via `--api-key-env`:
 
-The URL is the server origin, optionally with a reverse-proxy prefix. A base ending in `/v1` or a full `/v1/chat/completions` URL is trimmed to the origin; other API paths such as `/v1/models` are rejected.
-
 ```sh
 llama-doctor diagnose http://laptop-msi:8888 --api-key-env UNSLOTH_API_KEY
 ```
+
+The URL is the server origin, optionally with a reverse-proxy prefix. A base ending in `/v1` or a full `/v1/chat/completions` URL is trimmed to the origin or prefix; other API paths such as `/v1/models` are rejected.
 
 ```text
 llama-doctor 0.1.0  http://laptop-msi:8888
