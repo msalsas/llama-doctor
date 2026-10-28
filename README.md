@@ -40,6 +40,8 @@ PYTHONPATH=src python3 -m llama_doctor diagnose http://127.0.0.1:8080
 
 Point it at a running server. A plain llama.cpp server needs only the URL (for example `http://127.0.0.1:8080`); wrappers that require an API key, such as Unsloth Studio, take it from an environment variable via `--api-key-env`:
 
+The URL is the server origin, optionally with a reverse-proxy prefix. A base ending in `/v1` or a full `/v1/chat/completions` URL is trimmed to the origin; other API paths such as `/v1/models` are rejected.
+
 ```sh
 llama-doctor diagnose http://laptop-msi:8888 --api-key-env UNSLOTH_API_KEY
 ```
@@ -114,6 +116,8 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 - **Tool-call conformance.** Ten single-turn cases against a fixed 15-tool catalog: correct tool selection, arguments that validate against each tool's JSON Schema (type, properties, required, enum), two calls in one turn, a polite refusal when asked for a tool that does not exist, and correct behaviour for `tool_choice` `auto` and `none`. The score is shown out of 10.
 - **Empty-turn detection.** Three synthetic agent turns (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. The corpus lands around 8-10k prompt tokens measured on a Strata server; llama.cpp tokenizers may split somewhat higher. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
 - **Remediation.** Each symptom found is mapped to concrete settings for the detected server family.
+
+URL is the server origin; an OpenAI-style base ending in `/v1`, or a full `/v1/chat/completions` URL, also works.
 
 The server family is detected before any check runs. Strata markers in `GET /v1/models` entries — `meta.instanceId` or `owned_by` Strata — are checked first and mean the Strata family; then a `GET /props` that returns 200 means the llama.cpp family. Anything else is reported as unknown and gets generic advice only.
 

@@ -991,11 +991,13 @@ Changes elsewhere in the README:
 ````markdown
 ## Agent readiness check
 
-`llama-doctor agentcheck URL` tests whether the model behind an OpenAI-compatible endpoint can drive a coding agent. It sends greedy (`temperature 0`) requests to `/v1/chat/completions` and reports three things: URL is the server origin; an OpenAI-style base ending in `/v1`, or a full `/v1/chat/completions` URL, also works.
+`llama-doctor agentcheck URL` tests whether the model behind an OpenAI-compatible endpoint can drive a coding agent. It sends greedy (`temperature 0`) requests to `/v1/chat/completions` and reports three things:
 
 - **Tool-call conformance.** Ten single-turn cases against a fixed 15-tool catalog: correct tool selection, arguments that validate against each tool's JSON Schema (type, properties, required, enum), two calls in one turn, a polite refusal when asked for a tool that does not exist, and correct behaviour for `tool_choice` `auto` and `none`. The score is shown out of 10.
 - **Empty-turn detection.** Three synthetic agent turns of 8–10k prompt tokens (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
 - **Remediation.** Each symptom found is mapped to concrete settings for the detected server family.
+
+URL is the server origin; an OpenAI-style base ending in `/v1`, or a full `/v1/chat/completions` URL, also works.
 
 The server family is detected before any check runs. A `GET /props` that returns 200 means the llama.cpp family. Otherwise, `GET /v1/models` entries with `meta.instanceId` or `owned_by` Strata mean the Strata family. Anything else is reported as unknown and gets generic advice only.
 
@@ -1050,3 +1052,4 @@ CLI reference block:
 - **Phase A ignores `--max-tokens` and uses 2048.** This keeps the conformance score about tool use rather than thinking length. Thinking problems are surfaced by phase B, and by phase A only as a `thought_runaway` symptom.
 - **EMPTY applies to any `finish_reason`, not only `stop` and `length`.** An agent sees nothing in every such case, and the reason is kept as evidence.
 - **Two cells go beyond the verified facts:** `request_error` points to `--jinja`, the same verified flag as the malformed-arguments row, and `context_too_small` points to `-c`, a flag the repo already recommends elsewhere. Every other Strata cell without a verified key is `None`, and the renderer then shows only the generic advice.
+- **URL prefixes are kept, not rejected.** Only a version or API-endpoint last segment fails, so reverse-proxy subpaths keep working.

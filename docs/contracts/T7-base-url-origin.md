@@ -102,7 +102,8 @@ Add `REJECT = "base URL path must be a server origin or proxy prefix, not an API
 
 **`test_normalize_existing_errors_take_precedence`**:
 
-- `http://h:99999/v1/models` gives the message `"base URL port must be between 1 and 65535"`.
+- `http://h:99999/v1/models` gives the message `"base URL port must be digits only"` (accessing `parsed.port` raises `ValueError` for 99999).
+- `http://h:0/v1/models` gives the message `"base URL port must be between 1 and 65535"`.
 - `http://h/v1/models?x=1` gives `"base URL must not contain '?' or '#'"`.
 - `ftp://h/v1` gives `"base URL scheme must be http or https"`.
 
