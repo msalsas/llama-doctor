@@ -11,6 +11,7 @@ from llama_doctor.cli import main
 from .agentcheck_fakes import ChatResponder, agent_server, call, reply
 
 CHAT_PATH = "/v1/chat/completions"
+REJECT = "base URL path must be a server origin or proxy prefix, not an API path such as /v1/models"
 
 
 def run_cli(args):
@@ -154,6 +155,32 @@ class TestAgentcheckCli(unittest.TestCase):
                 phase_b += 1
                 self.assertEqual(payload["max_tokens"], 512)
         self.assertEqual(phase_b, 3 * 2)
+
+    def test_openai_style_base_url_is_trimmed(self):
+        with agent_server() as server:
+            code, stdout, _ = run_cli(
+                ["agentcheck", server.url + "/v1", "--replays", "2"])
+            self.assertEqual(code, 0)
+            self.assertIn(f"target: {server.url}\n", stdout)
+            self.assertFalse(any(r[1].startswith("/v1/v1") for r in server.requests))
+            methods_paths = {(r[0], r[1]) for r in server.requests}
+            self.assertIn(("POST", CHAT_PATH), methods_paths)
+            self.assertIn(("GET", "/v1/models"), methods_paths)
+
+    def test_full_chat_url_is_trimmed(self):
+        with agent_server() as server:
+            code, stdout, _ = run_cli(
+                ["agentcheck", server.url + "/v1/chat/completions", "--replays", "2", "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(stdout)["target"], server.url)
+
+    def test_api_path_url_is_rejected_without_requests(self):
+        with agent_server() as server:
+            code, stdout, stderr = run_cli(["agentcheck", server.url + "/v1/models"])
+            self.assertEqual(code, 3)
+            self.assertEqual(stdout, "")
+            self.assertEqual(stderr, "llama-doctor: " + REJECT + "\n")
+            self.assertEqual(server.requests, [])
 
 
 if __name__ == "__main__":

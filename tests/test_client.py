@@ -8,6 +8,8 @@ from llama_doctor.redact import Secret
 
 from .support import FakeLlamaServer, load_fixture
 
+REJECT = "base URL path must be a server origin or proxy prefix, not an API path such as /v1/models"
+
 
 class _RawResponseServer:
     def __init__(self, response: bytes) -> None:
@@ -64,6 +66,57 @@ class TestNormalizeBaseUrl(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 normalize_base_url(url)
 
+    def test_normalize_trims_openai_suffixes(self):
+        cases = (
+            ("http://h:8888", "http://h:8888"),
+            ("http://h:8888/v1", "http://h:8888"),
+            ("http://h:8888/v1/", "http://h:8888"),
+            ("http://h:8888/v1/chat/completions", "http://h:8888"),
+            (" http://h:8888/v1/chat/completions/ ", "http://h:8888"),
+            ("https://h/v1", "https://h"),
+            ("http://h/chat/completions", "http://h"),
+            ("http://h/v1//chat/completions", "http://h"),
+            ("http://h/proxy/v1", "http://h/proxy"),
+            ("http://h/proxy/v1/chat/completions/", "http://h/proxy"),
+            ("http://h/foo/bar", "http://h/foo/bar"),
+            ("http://v1", "http://v1"),
+            ("http://h/xv1", "http://h/xv1"),
+            ("http://[::1]:8080/v1", "http://[::1]:8080"),
+        )
+        for given, expected in cases:
+            with self.subTest(given=given):
+                self.assertEqual(normalize_base_url(given), expected)
+
+    def test_normalize_rejects_api_paths(self):
+        for url in (
+            "http://h:8888/v1/models",
+            "http://h/v2",
+            "http://h/v1/v1",
+            "http://h/V1",
+            "http://h/v1/completions",
+            "http://h/v1/chat",
+            "http://h/props",
+            "http://h/metrics",
+            "http://h/slots",
+            "http://h/proxy/v1/models",
+            "http://h/v1/chat/completions/chat/completions",
+        ):
+            with self.subTest(url=url), self.assertRaises(ValueError) as ctx:
+                normalize_base_url(url)
+            self.assertEqual(str(ctx.exception), REJECT)
+
+    def test_normalize_existing_errors_take_precedence(self):
+        cases = (
+            ("http://h:99999/v1/models", "base URL port must be digits only"),
+            ("http://h:0/v1/models", "base URL port must be between 1 and 65535"),
+            ("http://h/v1/models?x=1", "base URL must not contain '?' or '#'"),
+            ("ftp://h/v1", "base URL scheme must be http or https"),
+        )
+        for url, message in cases:
+            with self.subTest(url=url), self.assertRaises(ValueError) as ctx:
+                normalize_base_url(url)
+            self.assertEqual(str(ctx.exception), message)
+
 
 class TestLlamaClient(unittest.TestCase):
     def test_fetch_metrics(self):
@@ -102,6 +155,19 @@ class TestLlamaClient(unittest.TestCase):
             client.fetch_metrics()
             headers = server.requests[0][2]
             self.assertNotIn("Authorization", headers)
+
+    def test_v1_base_url_requests_origin_paths(self):
+        with FakeLlamaServer() as server:
+            server.set_route(
+                "/v1/models",
+                200,
+                load_fixture("models_full.json"),
+                content_type="application/json",
+            )
+            client = LlamaClient(server.url + "/v1")
+            self.assertEqual(client.base_url, server.url)
+            client.fetch_models()
+            self.assertEqual([r[1] for r in server.requests], ["/v1/models"])
 
     def test_http_error_hides_body(self):
         with FakeLlamaServer() as server:

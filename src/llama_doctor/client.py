@@ -1,5 +1,6 @@
 import http.client
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -22,6 +23,10 @@ from .slots import parse_slots
 
 DEFAULT_TIMEOUT: float = 5.0
 MAX_BODY_BYTES: int = 4 * 1024 * 1024
+_ORIGIN_SUFFIXES: tuple[str, ...] = ("/chat/completions", "/v1")
+_ENDPOINT_SEGMENTS: frozenset[str] = frozenset(
+    {"chat", "completion", "completions", "embeddings", "health", "metrics", "models", "props", "slots"}
+)
 
 
 class FetchError(Exception):
@@ -52,7 +57,16 @@ def normalize_base_url(url: str) -> str:
         raise ValueError("base URL port must be digits only") from None
     if port is not None and not 1 <= port <= 65535:
         raise ValueError("base URL port must be between 1 and 65535")
-    return cleaned
+    path = parsed.path
+    for suffix in _ORIGIN_SUFFIXES:
+        if path.endswith(suffix):
+            path = path[: -len(suffix)].rstrip("/")
+    last = path.rpartition("/")[2].lower()
+    if last in _ENDPOINT_SEGMENTS or re.fullmatch(r"v[0-9]+", last):
+        raise ValueError(
+            "base URL path must be a server origin or proxy prefix, not an API path such as /v1/models"
+        )
+    return cleaned[: len(cleaned) - len(parsed.path)] + path
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):

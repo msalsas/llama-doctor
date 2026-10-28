@@ -156,7 +156,11 @@ class LlamaClient:
 ```
 - `normalize_base_url`: strip whitespace and trailing `/`. Require scheme
   `http`/`https` and a host. Reject userinfo, query, and fragment with
-  `ValueError`. Keep any path prefix (servers behind a reverse proxy).
+  `ValueError`. Then trim a trailing `/chat/completions` and then a trailing
+  `/v1`, at most once each, so OpenAI-SDK bases and full curl URLs reduce to
+  the origin. Keep any other path prefix (servers behind a reverse proxy).
+  Reject a remaining path whose last segment is an API endpoint name or a
+  version like `v2`.
 - Use `urllib.request` with an opener whose redirect handler returns None,
   so a 3xx surfaces as `HTTPError`. Read at most `MAX_BODY_BYTES + 1` bytes.
 - `reason` is always one of: `HTTP <code>`, `connection refused`,
@@ -264,7 +268,9 @@ gives all None); `test_probe_result_reliable` (999 gives False, 1000 gives True)
 
 test_client (all against `FakeLlamaServer`): `test_normalize_base_url`
 (`" http://h:8080/ "` gives `http://h:8080`, `http://h/proxy/` gives
-`http://h/proxy`; `ftp://h`, `http://u:p@h`, `http://h?x=1`, and `h:8080`
+`http://h/proxy`; `http://h:8888/v1` and `http://h:8888/v1/chat/completions`
+give `http://h:8888`; `http://h/v1/models`, `http://h/v2` and `http://h/v1/v1`
+raise ValueError; `ftp://h`, `http://u:p@h`, `http://h?x=1`, and `h:8080`
 raise ValueError); `test_fetch_metrics` (prefill 40.0, taken_at == clock value);
 `test_fetch_props_whitelisted`; `test_bearer_header_sent`
 (`Authorization == "Bearer k3y"`); `test_no_auth_header_without_key`;

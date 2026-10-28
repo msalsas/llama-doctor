@@ -794,6 +794,11 @@ In `build_parser`, after the `serve_parser` block and before `return parser`:
     agentcheck_parser.add_argument("--max-tokens", type=_positive_int, default=512, metavar="N")
 ```
 
+The URL argument goes through `normalize_base_url` (T1). `http://host:8888/v1`
+and `http://host:8888/v1/chat/completions` both target `http://host:8888`, and
+the report's `target:` line prints that trimmed URL. Before this, the client
+sent `/v1/v1/chat/completions` (HTTP 405 on Unsloth Studio).
+
 In `main`, right after `if client is None: return EXIT_TOOL_ERROR`:
 
 ```python
@@ -986,7 +991,7 @@ Changes elsewhere in the README:
 ````markdown
 ## Agent readiness check
 
-`llama-doctor agentcheck URL` tests whether the model behind an OpenAI-compatible endpoint can drive a coding agent. It sends greedy (`temperature 0`) requests to `/v1/chat/completions` and reports three things:
+`llama-doctor agentcheck URL` tests whether the model behind an OpenAI-compatible endpoint can drive a coding agent. It sends greedy (`temperature 0`) requests to `/v1/chat/completions` and reports three things: URL is the server origin; an OpenAI-style base ending in `/v1`, or a full `/v1/chat/completions` URL, also works.
 
 - **Tool-call conformance.** Ten single-turn cases against a fixed 15-tool catalog: correct tool selection, arguments that validate against each tool's JSON Schema (type, properties, required, enum), two calls in one turn, a polite refusal when asked for a tool that does not exist, and correct behaviour for `tool_choice` `auto` and `none`. The score is shown out of 10.
 - **Empty-turn detection.** Three synthetic agent turns of 8–10k prompt tokens (system prompt, project notes and tool results) are each replayed 6 times with `max_tokens 512`. Each reply is classified as actionable (text or a tool call), empty (200 OK with neither) or thought runaway (reasoning but no answer). A single empty reply fails the phase.
