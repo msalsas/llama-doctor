@@ -119,6 +119,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--ram-gib N` | System RAM available for offloaded weights. |
 | `--weights-gib N` | Model weight size in GiB, used only when the server does not report it; the memory finding then shows `weights_source: hint`. |
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
+| `--model NAME` | For a llama-server in router mode (several models behind one URL): read `/metrics` for model `NAME` by sending `GET /metrics?model=NAME`. `/props`, `/v1/models` and `/slots` are read as usual. Cannot be combined with `--probe` (exit 3). |
 | `--timeout SEC` | HTTP timeout per request. |
 | `--no-color` | Disable ANSI colour in text output. |
 | `--no-slots` | Do not read `GET /slots` (live context and the KV estimate in findings). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
@@ -137,6 +138,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | `--vram-gib N` | GPU memory available, same as in `diagnose`; without it the memory check stays N/A on the dashboard. |
 | `--ram-gib N` | System RAM available for offloaded weights, same as in `diagnose`. |
 | `--weights-gib N` | Model weight size in GiB, same as in `diagnose`; the size reported by the server wins when present. |
+| `--model NAME` | Router mode model whose `/metrics` the dashboard polls, same as in `diagnose`. |
 | `--no-slots` | Do not poll `GET /slots`, same as in `diagnose`; the context tile then shows only the peak. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.

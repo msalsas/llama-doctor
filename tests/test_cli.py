@@ -282,6 +282,117 @@ class TestCli(unittest.TestCase):
     def test_serve_rejects_non_positive_history(self):
         self._assert_serve_rejects("--history", ("0", "-5", "1.5", "x"), "argument --history:")
 
+    def _set_routed_routes(self, server: FakeLlamaServer) -> None:
+        server.set_route("/metrics?model=qwen3", 200, load_fixture("metrics_moe_offload.txt"))
+        server.set_route("/props", 200, load_fixture("props_full.json"), "application/json")
+        server.set_route("/v1/models", 200, load_fixture("models_full.json"), "application/json")
+
+    def test_diagnose_model_flag(self):
+        with FakeLlamaServer() as server:
+            self._set_routed_routes(server)
+            result, stdout, _ = self._run(["diagnose", server.url, "--model", "qwen3"])
+            paths = [req[1] for req in server.requests]
+
+        self.assertEqual(result, 2)
+        self.assertIn("overall: CRITICAL (exit 2)", stdout)
+        self.assertIn("/metrics?model=qwen3", paths)
+        self.assertNotIn("/metrics", paths)
+
+    def test_diagnose_model_json(self):
+        with FakeLlamaServer() as server:
+            self._set_routed_routes(server)
+            url = server.url
+            result, stdout, _ = self._run(["diagnose", url, "--model", "qwen3", "--json"])
+
+        document = json.loads(stdout)
+        self.assertEqual(result, 2)
+        self.assertEqual(document["rates"]["prefill_tps"], 40.0)
+        self.assertEqual(document["target"], url)
+        self.assertEqual(document["errors"], {})
+
+    def test_diagnose_without_model_hits_bare_metrics(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            self._run(["diagnose", server.url])
+            paths = [request[1] for request in server.requests]
+
+        self.assertEqual(paths[0], "/metrics")
+        self.assertFalse(any("?model=" in path for path in paths))
+
+    def test_probe_with_model_exit_3(self):
+        with FakeLlamaServer() as server:
+            result, stdout, stderr = self._run(
+                ["diagnose", server.url, "--probe", "--model", "qwen3"]
+            )
+            self.assertEqual(server.requests, [])
+
+        self.assertEqual(result, EXIT_TOOL_ERROR)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "llama-doctor: --probe cannot be combined with --model\n")
+
+    def test_probe_with_empty_model_exit_3(self):
+        with FakeLlamaServer() as server:
+            result, stdout, stderr = self._run(
+                ["diagnose", server.url, "--probe", "--model", ""]
+            )
+            self.assertEqual(server.requests, [])
+
+        self.assertEqual(result, EXIT_TOOL_ERROR)
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "llama-doctor: --probe cannot be combined with --model\n")
+        self.assertNotIn("model must not be empty", stderr)
+
+    def test_empty_model_exit_3(self):
+        with FakeLlamaServer() as server:
+            result, _, stderr = self._run(["diagnose", server.url, "--model", ""])
+            self.assertEqual(server.requests, [])
+
+        self.assertEqual(result, EXIT_TOOL_ERROR)
+        self.assertIn("llama-doctor: model must not be empty", stderr)
+
+    def test_url_with_model_query_exit_3(self):
+        result, _, stderr = self._run(["diagnose", "http://127.0.0.1:8080?model=qwen3"])
+
+        self.assertEqual(result, EXIT_TOOL_ERROR)
+        self.assertIn("base URL must not contain '?' or '#'", stderr)
+
+    def test_serve_passes_model_to_client(self):
+        with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
+            result, _, _ = self._run(["serve", "http://server", "--model", "qwen3"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(run.call_args.args[0].model, "qwen3")
+        self.assertEqual(run.call_args.args[0].base_url, "http://server")
+
+    def test_serve_without_model(self):
+        with patch("llama_doctor.dashboard.server.run", return_value=0) as run:
+            result, _, _ = self._run(["serve", "http://server"])
+
+        self.assertEqual(result, 0)
+        self.assertIsNone(run.call_args.args[0].model)
+
+    def test_serve_forwards_model_and_options(self):
+        dashboard_server = types.ModuleType("llama_doctor.dashboard.server")
+        dashboard_server.run = Mock(return_value=0)
+        with patch.dict(sys.modules, {"llama_doctor.dashboard.server": dashboard_server}):
+            result, stdout, _ = self._run(
+                ["serve", "http://server", "--host", "0.0.0.0", "--port", "9000",
+                 "--interval", "3.5", "--history", "20", "--rate-window", "45", "--vram-gib", "12",
+                 "--model", "qwen3"]
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(stdout, "")
+        dashboard_server.run.assert_called_once()
+        args, kwargs = dashboard_server.run.call_args
+        self.assertEqual(args[0].base_url, "http://server")
+        self.assertEqual(args[0].model, "qwen3")
+        self.assertEqual(
+            {key: value for key, value in kwargs.items() if key != "out"},
+            {"host": "0.0.0.0", "port": 9000, "interval": 3.5, "history": 20, "rate_window": 45.0,
+             "hints": HostHints(vram_gib=12.0), "slots": True},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

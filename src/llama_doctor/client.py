@@ -67,8 +67,12 @@ class LlamaClient:
         api_key: Secret | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         clock: Callable[[], float] = time.time,
+        model: str | None = None,
     ) -> None:
         self._base_url = normalize_base_url(base_url)
+        if model is not None and model.strip() == "":
+            raise ValueError("model must not be empty")
+        self._model = model
         self._api_key = api_key
         self._timeout = timeout
         self._clock = clock
@@ -78,18 +82,22 @@ class LlamaClient:
     def base_url(self) -> str:
         return self._base_url
 
+    @property
+    def model(self) -> str | None:
+        return self._model
+
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
         if self._api_key is not None:
             headers["Authorization"] = "Bearer " + self._api_key.reveal()
         return headers
 
-    def _fetch_bytes(self, path: str, data: bytes | None = None) -> bytes:
+    def _fetch_bytes(self, path: str, data: bytes | None = None, query: str = "") -> bytes:
         headers = self._headers()
         if data is not None:
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
-            self._base_url + path, data=data, headers=headers
+            self._base_url + path + query, data=data, headers=headers
         )
         try:
             with self._opener.open(request, timeout=self._timeout) as response:
@@ -124,7 +132,12 @@ class LlamaClient:
             raise FetchError(path, "invalid response") from None
 
     def fetch_metrics(self) -> MetricsSnapshot:
-        body = self._fetch_bytes("/metrics")
+        query = (
+            "?model=" + urllib.parse.quote(self._model, safe="")
+            if self._model is not None
+            else ""
+        )
+        body = self._fetch_bytes("/metrics", query=query)
         try:
             text = body.decode("utf-8")
         except UnicodeDecodeError:
