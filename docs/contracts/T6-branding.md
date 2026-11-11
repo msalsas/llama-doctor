@@ -744,5 +744,14 @@ src/llama_doctor/render/terminal.py:66:        f"llama-doctor {__version__}  {ta
 ```
 
 <<<END Record 2 - version single-source>>>
-### Record 2 addendum (orchestrator override O9, 2026-11-11)  Spec 2 said to leave the README sample version at 0.1.0 on the grounds that it is a captured transcript. That is wrong for this repo: tests/test_readme.py's test_quick_start_example_matches_rendered_fixture renders the readme_example fixture through render_report and asserts byte equality with the README fenced block, and render_report reads __version__ for its first line. Bumping the version therefore forces the sample version token to move to 0.2.0 in the same commit.
-### Record 2 addendum (architect review R2, 2026-11-11)  The regex guard specified in Record 2 was replaced by the TOML-parsing guard proposed in the architect review: the regex matched any version = line anywhere in the file and failed on harmless reformatting. The replacement skips on Python 3.10, where tomllib is absent, and both CI versions (3.11 and 3.13) run it. Note that CI does not run 3.10 at all despite requires-python. The review also added assertions that the --json diagnosis document and the dashboard state report the package version, the two reporting paths that stayed silent during the drift.
+### Record 2 addendum (orchestrator override O9, 2026-11-11)
+
+Spec 2 said to leave the README sample version at 0.1.0 on the grounds that it is a captured transcript. That is wrong for this repo: tests/test_readme.py's test_quick_start_example_matches_rendered_fixture renders the readme_example fixture through render_report and asserts byte equality with the README fenced block, and render_report reads __version__ for its first line. Bumping the version therefore forces the sample version token to move to 0.2.0 in the same commit.
+
+### Record 2 addendum (architect review R2, 2026-11-11)
+
+The regex guard specified in Record 2 was replaced by the TOML-parsing guard proposed in the architect review: the regex matched any version = line anywhere in the file and failed on harmless reformatting. The replacement skips on Python 3.10, where tomllib is absent, and both CI versions (3.11 and 3.13) run it. Note that CI does not run 3.10 at all despite requires-python. The review also added assertions that the --json diagnosis document and the dashboard state report the package version, the two reporting paths that stayed silent during the drift.
+
+### Record 2 addendum (orchestrator, 2026-11-11)
+
+Override O1 held the author-metadata change because the surname spelling was unconfirmed at the time. The repo owner has confirmed the surname is Salsas, matching the GitHub handle msalsas, so the branch corrected pyproject.toml and LICENSE. The quoted Alsas strings elsewhere in this record are historical and stay as written.
