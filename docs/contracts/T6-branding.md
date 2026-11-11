@@ -414,3 +414,335 @@ ASSET SOURCES (PART 3) — these are the measured candidate sources the contract
   <circle class="crit" cx="78" cy="62" r="7.0"/>
 </svg>
 <<<END A-favicon>>>
+
+=== RECORD 2 — version single-source ===
+
+# TRANSPORT FILE — version single-source fix (second task on branch feature/branding)
+
+Part 1 below (after `=== SPEC (PART 1) ===`) is the architect's spec. Part 2 is the orchestrator's
+audit and overrides, and WINS where they contradict. Part 3 is repo ground truth the orchestrator
+read live from this same worktree.
+
+## ORCHESTRATOR AUDIT AND OVERRIDES (PART 2)
+
+- **O1 — Scope cut.** The author-metadata change (§5 of the spec) is HELD: the repo consistently
+  says "Manolo Alsas" (pyproject.toml, LICENSE, git config) and the orchestrator's assumption that
+  it should be "Salsas" was an inference from the GitHub handle, not a fact. The user has not
+  confirmed a spelling yet. So: do NOT touch the `authors` line in `pyproject.toml`, do NOT touch
+  `LICENSE`, do NOT change any git identity. One commit only, the version fix.
+- **O2 — No attribution.** Drop both `Co-Authored-By: Claude ...` trailers and the
+  `Generated with Claude Code` footer from §6. Repo convention: plain imperative subject, body only
+  when the change needs one. Keep the subject and body text the spec proposes.
+- **O3 — Confirmed by the orchestrator, live in this worktree.** `[build-system]
+  requires = ["setuptools>=77"]` (so the dynamic-attr path is supported); `tests/test_scaffold.py`
+  currently contains exactly one test (`test_version` pinning 0.1.0), so replacing the whole file
+  with the spec's version loses nothing; the two golden strings in `tests/test_terminal.py` (lines
+  63 and 91) contain no `{` or `}` characters, so f-string conversion is inert apart from the
+  version token; `llama_doctor/render/terminal.py:66` builds the same first line from
+  `__version__`, which is why the goldens break if you bump the version without touching them;
+  `jsondoc.py:27` and `dashboard/sampler.py:250` also report `__version__`, so the stale 0.1.0
+  leaks into `--json` and the dashboard `/state`, not just `--version`.
+- **O4 — Tag fact now confirmed by the orchestrator** (the spec could not check it): the remote tag
+  `v0.2.0` exists and points at `2058683` ("Version 0.2.0"), the current `main`. So the published
+  release does report 0.1.0 from the CLI, `--json` and `/state`. Do not move, delete or re-push any
+  tag; just record the fact. It belongs in the PR description.
+- **O5 — Toolchain.** `python3` everywhere (no `python` alias here). `ruff` is not installed in the
+  sandbox: skip `ruff check`, the orchestrator runs it outside. Keep lines ≤ 100 characters. No
+  comments in code unless one carries information the code cannot express.
+- **O6 — Venv check adjustment.** §7's editable-install check asserts `Author == "Manolo Salsas"`:
+  drop that assertion (metadata unchanged per O1) and keep the version equality plus the CLI probe.
+  It needs PyPI for build isolation; if the network blocks it, report that the step did not run —
+  do not substitute a weaker claim.
+- **O7 — Boundaries.** Work on `feature/branding` in this worktree, on top of the three existing
+  branding commits. No `git push`, no `gh`, no PR, no branch switch, no `git stash`, no `git
+  config`, no tag operations. `README.md` line 48 stays as printed (it is a captured 0.1.0
+  transcript; changing one line of it would mix runs). Delete this transport file at the end and
+  leave `git status --porcelain` empty.
+- **O8 — Archive.** Append the spec (Part 1) plus this Part 2 and Part 3 to
+  `docs/contracts/T6-branding.md` as a clearly delimited second record ("Record 2 — version
+  single-source"), in the same commit as the fix. The existing 416-line record stays byte-identical.
+
+Work order: apply the §2 edits except the author line; rewrite `tests/test_scaffold.py` with the
+guard; run §7's verify list as amended by O5 and O6 (skip the Alsas grep for `Salsas`; the
+`0\.1\.0` grep must come back empty except `./README.md:48:`); commit once with the spec's message
+minus trailers; report `git show --stat`, each command with exit code and test counts, and anything
+you could not run. If the full suite fails in a way the spec did not anticipate, stop and report.
+
+=== SPEC (PART 1) ===
+
+# Spec: version drift and author metadata (llama-doctor @ 2058683)
+
+**Fact check.** I re-read the repo. Every stated fact holds, with these corrections and gaps:
+- **Remote tags not checked.** `git tag -l` shows only `v0.1.0`. I was not permitted to run `git ls-remote`, so I could not confirm the remote `v0.2.0` tag or which commit it points to.
+- **Three more places hardcode `0.1.0`:**
+  - `tests/test_cli.py:169`: `self.assertIn("llama-doctor 0.1.0", stdout.getvalue())`
+  - `tests/test_terminal.py:63` and `:91`: the golden strings start with `llama-doctor 0.1.0  http://server`
+  - `README.md:48`: sample output, `llama-doctor 0.1.0  http://laptop-msi:8888`
+- **The version is also used by `--json` and the dashboard.** `src/llama_doctor/render/jsondoc.py:27` and `src/llama_doctor/dashboard/sampler.py:250` read `__version__`. So the 0.1.0 also shows up in `--json` output and the dashboard `/state`, not only in `--version`.
+- **No publish step exists.** `.github/workflows/` contains only `ci.yml`, and there is no PyPI or wheel-build workflow, so nothing builds a release wheel from `pyproject.toml`. CI does run `pip install -e . ruff`, which means CI builds the package metadata on every run.
+- **The author name has a second hit:** `LICENSE:3`. Also, local `git config user.name` is "Manolo Alsas", so new commits will keep the old spelling until the orchestrator changes it (see §5).
+
+## 1. Which fix
+
+**Decision: make `pyproject.toml` read the version from `llama_doctor.__version__`, and make `src/llama_doctor/__init__.py` say `0.2.0`.**
+
+The trade-off:
+- **Just bumping `__init__.py`** fixes today's mismatch, but every future release still means editing two files that can drift apart again.
+- **Reading the version from the code** leaves `__init__.py` as the only place the version is written, and the CLI, JSON output and dashboard already read from there. The cost is a three-line setuptools table. setuptools ≥77 (already required) reads the literal `__version__ = "..."` without importing the package. There is no PyPI artifact or release pipeline to adapt, and CI's `pip install -e .` already tests this build path on every push.
+
+## 2. Version edits
+
+**`src/llama_doctor/__init__.py`**
+```python
+# before
+__version__ = "0.1.0"
+# after
+__version__ = "0.2.0"
+```
+
+**`pyproject.toml`**: remove the static version and add `dynamic`.
+```toml
+# before
+[project]
+name = "llama-doctor"
+version = "0.2.0"
+description = "Non-invasive health diagnosis for local LLM inference servers via /metrics and /props."
+# after
+[project]
+name = "llama-doctor"
+dynamic = ["version"]
+description = "Non-invasive health diagnosis for local LLM inference servers via /metrics and /props."
+```
+Then add a new table right after `[tool.setuptools.packages.find]`:
+```toml
+# before
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# after
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "llama_doctor.__version__"}
+
+[tool.setuptools.package-data]
+```
+
+**`tests/test_scaffold.py`**: this stays the one deliberate place where a test spells out the version; the guard from §3 goes in the same file. Replace the whole file with:
+```python
+import re
+import unittest
+from pathlib import Path
+
+import llama_doctor
+
+PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+
+class TestScaffold(unittest.TestCase):
+    def test_version(self):
+        self.assertEqual(llama_doctor.__version__, "0.2.0")
+
+    def test_pyproject_takes_version_from_package(self):
+        text = PYPROJECT.read_text(encoding="utf-8")
+        self.assertRegex(text, r'(?m)^dynamic = \["version"\]$')
+        self.assertEqual(
+            re.findall(r"(?m)^version\s*=.*$", text),
+            ['version = {attr = "llama_doctor.__version__"}'],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+**`tests/test_cli.py`**: stop pinning the number.
+```python
+# before (imports, line 10-11)
+from llama_doctor.analysis.base import HostHints
+from llama_doctor.cli import EXIT_TOOL_ERROR, main
+# after
+from llama_doctor import __version__
+from llama_doctor.analysis.base import HostHints
+from llama_doctor.cli import EXIT_TOOL_ERROR, main
+```
+```python
+# before (line 169)
+        self.assertIn("llama-doctor 0.1.0", stdout.getvalue())
+# after
+        self.assertIn(f"llama-doctor {__version__}", stdout.getvalue())
+```
+
+**`tests/test_terminal.py`**: the golden strings read the version from the package. Neither string contains `{` or `}`, so turning them into f-strings changes nothing else.
+```python
+# before (imports, line 4)
+from llama_doctor.analysis import diagnose
+# after
+from llama_doctor import __version__
+from llama_doctor.analysis import diagnose
+```
+```python
+# before (line 63)
+            """llama-doctor 0.1.0  http://server
+# after
+            f"""llama-doctor {__version__}  http://server
+```
+```python
+# before (line 91)
+            """llama-doctor 0.1.0  http://server
+# after
+            f"""llama-doctor {__version__}  http://server
+```
+
+**`README.md:48`: leave it.** It is a captured transcript from a real 0.1.0 run, next to screenshots from that same run. Changing only the version line would make the sample a mix of two runs.
+
+## 3. Guard against drift coming back
+
+After §2, the version can't be set in two places, because `pyproject.toml` no longer has its own. The real risk is someone adding a static `version = "x.y.z"` back. `test_pyproject_takes_version_from_package` (in §2) catches that:
+- It fails if any `^version =` line other than the `attr` line appears, or if `dynamic = ["version"]` is removed.
+- It uses only `re` and `pathlib`, with no `tomllib` (that is 3.11+), so it runs on 3.10.
+
+I rejected a check based on `importlib.metadata.version()`. It fails when the package isn't installed (the suite runs with `PYTHONPATH=src`), and an editable install keeps the version from install time, so it would give false failures after a local bump.
+
+## 4. Tags
+
+- **The fix does not depend on tags.**
+- **Orchestrator step, before merge:**
+  1. Run `git fetch --tags origin`.
+  2. Run `git rev-parse 'v0.2.0^{commit}'` and record the result.
+- **If the tag points to 2058683** (likely, given the commit message "Version 0.2.0"), the published v0.2.0 source reports `0.1.0` from `--version`, `--json` and `/state`. Do not move or re-push the tag. Rewriting a published release tag is worse than the cosmetic bug.
+- Cutting a v0.2.1 release is out of scope for this spec and needs explicit user approval. Mention the issue in the PR description.
+
+## 5. Author metadata
+
+Hits for `Alsas|Salsas|Manolo`, skipping `.git` and `__pycache__`:
+
+| file:line | content | action |
+|---|---|---|
+| `pyproject.toml:9` | `authors = [{name = "Manolo Alsas"}]` | change |
+| `LICENSE:3` | `Copyright (c) 2026 Manolo Alsas` | change |
+
+There are no hits for `Salsas`, and no other hits in `README.md`, `docs/`, `src/`, `tests/` or `.github/`.
+
+```toml
+# pyproject.toml, before
+authors = [{name = "Manolo Alsas"}]
+# after
+authors = [{name = "Manolo Salsas"}]
+```
+```text
+# LICENSE line 3, before
+Copyright (c) 2026 Manolo Alsas
+# after
+Copyright (c) 2026 Manolo Salsas
+```
+Do not rewrite history or touch GitHub profiles.
+
+**Orchestrator note (not for the implementer):**
+- `git config user.name` is currently "Manolo Alsas", so these fix commits will themselves carry the misspelling.
+- The orchestrator should commit with `-c user.name="Manolo Salsas"`, or the user should fix their git config. That change is outside the repo, so ask the user first.
+- The surname spelling comes from the request, not from the repo. Every repo source says "Alsas".
+
+## 6. Commit plan
+
+The user asked for one PR. Unrelated changes in one PR make a selective revert harder, but these two are small and self-contained, so comply. Use separate commits, ordered after (or before) the branding commits, never mixed into them.
+
+1. Commit 1:
+```
+fix: single-source version from llama_doctor.__version__
+
+pyproject.toml declared 0.2.0 while __init__.py said 0.1.0, so
+--version, --json and the dashboard reported 0.1.0. pyproject now
+reads the version via [tool.setuptools.dynamic]; tests read
+__version__ instead of pinning it, and test_scaffold guards against
+a static version returning.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+```
+   Files: `pyproject.toml` (version lines only), `src/llama_doctor/__init__.py`, `tests/test_scaffold.py`, `tests/test_cli.py`, `tests/test_terminal.py`.
+
+2. Commit 2:
+```
+chore: correct author surname to Salsas
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+```
+   Files: `pyproject.toml` (authors line), `LICENSE`.
+
+**PR description:** mention the v0.2.0 tag finding from §4 and end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+
+## 7. Verify commands
+
+Run from the worktree root:
+```bash
+grep -rn --exclude-dir=.git --exclude-dir=__pycache__ -E 'Alsas|0\.1\.0' . ; test "$(grep -rn --exclude-dir=.git --exclude-dir=__pycache__ -E 'Alsas|0\.1\.0' . | grep -v '^./README.md:48:' | wc -l)" -eq 0
+PYTHONPATH=src python3 -m llama_doctor --version            # expect: llama-doctor 0.2.0
+PYTHONPATH=src python3 -m unittest tests.test_scaffold -v
+python3 -m venv /tmp/ld-venv && /tmp/ld-venv/bin/pip install -q -e . && /tmp/ld-venv/bin/python -c "import importlib.metadata as m, llama_doctor; v=m.version('llama-doctor'); a=m.metadata('llama-doctor')['Author']; assert v == llama_doctor.__version__ == '0.2.0', v; assert a == 'Manolo Salsas', a; print('ok', v, a)"
+/tmp/ld-venv/bin/llama-doctor --version                     # expect: llama-doctor 0.2.0
+ruff check src tests
+PYTHONPATH=src python3 -m unittest discover -v
+```
+If `pip install` in the venv can't reach PyPI to fetch `setuptools>=77` for the isolated build, rerun with network access. Do not drop the check: it is the only local test that the version really comes from the code.
+
+## Risks
+- **The released tag is wrong:** if v0.2.0 points to 2058683, its source reports 0.1.0, and this fix only corrects `main` going forward.
+- **Older pip:** `{attr = ...}` needs build isolation to pick up setuptools ≥77. A pip that is too old to honour `[build-system]` would fail to build. CI's pinned `setup-python@v5` is fine.
+- **Python 3.10 isn't tested in CI:** the matrix runs 3.11 and 3.13 although `requires-python = ">=3.10"`. The new test avoids `tomllib`, but nothing in CI proves 3.10 works.
+- **The guard is a text match:** reformatting the `attr` line (spacing, quote style) fails `test_pyproject_takes_version_from_package`. That is a false alarm, not missed drift.
+- **New commits keep the old spelling:** they will still show "Alsas" unless the orchestrator overrides `user.name` (§5).
+
+---
+
+REPO GROUND TRUTH (PART 3) — read live in this worktree at HEAD of feature/branding (three branding commits on top of main = 2058683)
+
+```
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llama-doctor"
+version = "0.2.0"
+description = "Non-invasive health diagnosis for local LLM inference servers via /metrics and /props."
+authors = [{name = "Manolo Alsas"}]
+license = "MIT"
+--- tests/test_scaffold.py (whole file, 12 lines)
+import unittest
+
+import llama_doctor
+
+
+class TestScaffold(unittest.TestCase):
+    def test_version(self):
+        self.assertEqual(llama_doctor.__version__, "0.1.0")
+
+
+if __name__ == "__main__":
+    unittest.main()
+--- tests/test_cli.py:166-170
+            main(["--version"])
+
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("llama-doctor 0.1.0", stdout.getvalue())
+
+--- tests/test_terminal.py:63 and :91
+            """llama-doctor 0.1.0  http://server
+            """llama-doctor 0.1.0  http://server
+--- version consumers
+src/llama_doctor/__init__.py:1:__version__ = "0.1.0"
+src/llama_doctor/cli.py:7:from . import __version__
+src/llama_doctor/cli.py:45:    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+src/llama_doctor/dashboard/sampler.py:7:from llama_doctor import __version__
+src/llama_doctor/dashboard/sampler.py:250:                "version": __version__,
+src/llama_doctor/render/jsondoc.py:3:from llama_doctor import __version__
+src/llama_doctor/render/jsondoc.py:27:        "version": __version__,
+src/llama_doctor/render/terminal.py:4:from llama_doctor import __version__
+src/llama_doctor/render/terminal.py:66:        f"llama-doctor {__version__}  {target}",
+```
+
+<<<END Record 2 — version single-source>>>
+### Record 2 addendum (orchestrator override O9, 2026-11-11)  Spec 2 said to leave the README sample version at 0.1.0 on the grounds that it is a captured transcript. That is wrong for this repo: tests/test_readme.py's test_quick_start_example_matches_rendered_fixture renders the readme_example fixture through render_report and asserts byte equality with the README fenced block, and render_report reads __version__ for its first line. Bumping the version therefore forces the sample version token to move to 0.2.0 in the same commit.
+### Record 2 addendum (architect review R2, 2026-11-11)  The regex guard specified in Record 2 was replaced by the TOML-parsing guard proposed in the architect review: the regex matched any version = line anywhere in the file and failed on harmless reformatting. The replacement skips on Python 3.10, where tomllib is absent, and both CI versions (3.11 and 3.13) run it. Note that CI does not run 3.10 at all despite requires-python. The review also added assertions that the --json diagnosis document and the dashboard state report the package version, the two reporting paths that stayed silent during the drift.
