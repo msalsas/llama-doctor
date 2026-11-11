@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from llama_doctor import __version__
 from llama_doctor.analysis import diagnose
 from llama_doctor.analysis.base import Finding, Report, Severity
 from llama_doctor.render.jsondoc import diagnosis_document
@@ -24,6 +25,11 @@ class TestJsonDocument(unittest.TestCase):
         decoded = json.loads(json.dumps(document, allow_nan=False))
         self.assertEqual(decoded["findings"][0]["evidence"],
                          {"prefill_tps": 132.60928071193192, "hit_ratio": 0.1111111, "nan": None})
+
+    def test_document_reports_package_version(self):
+        ctx = make_context()
+        document = diagnosis_document(diagnose(ctx), ctx.snapshot, target="http://server")
+        self.assertEqual(document["version"], __version__)
 
 
 if __name__ == "__main__":

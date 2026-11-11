@@ -1,4 +1,6 @@
-# llama-doctor
+<p align="center"><img src="docs/assets/logo-mark.svg" alt="llama-doctor logo" width="96" height="96"></p>
+
+<h1 align="center">llama-doctor</h1>
 
 A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured.
 
@@ -45,7 +47,7 @@ llama-doctor diagnose http://laptop-msi:8888 --api-key-env UNSLOTH_API_KEY
 ```
 
 ```text
-llama-doctor 0.1.0  http://laptop-msi:8888
+llama-doctor 0.2.0  http://laptop-msi:8888
 model  Qwen3.8-Flash-Next-GGUF  quant UD-Q3_K_XL  ctx 80128  slots 1  build unsloth-studio/v0.1.908-beta
 
 rates (lifetime averages)

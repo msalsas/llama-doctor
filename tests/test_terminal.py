@@ -1,6 +1,7 @@
 import unittest
 from io import StringIO
 
+from llama_doctor import __version__
 from llama_doctor.analysis import diagnose
 from llama_doctor.analysis.base import Finding, Impact, Recommendation, Report, Severity
 from llama_doctor.models import MetricsSnapshot, ProbeResult, PropsSnapshot, ServerSnapshot
@@ -60,7 +61,7 @@ class TestTerminal(unittest.TestCase):
 
         self.assertEqual(
             output,
-            """llama-doctor 0.1.0  http://server
+            f"""llama-doctor {__version__}  http://server
 model  model  quant Q4_0  ctx 4096  slots 1  build build
 
 rates (lifetime averages)
@@ -88,7 +89,7 @@ overall: WARN (exit 1)""",
 
         self.assertEqual(
             output,
-            """llama-doctor 0.1.0  http://server
+            f"""llama-doctor {__version__}  http://server
 model  -  quant -  ctx -  slots -  build -
 
 rates (lifetime averages)

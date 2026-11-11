@@ -7,6 +7,7 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
+from llama_doctor import __version__
 from llama_doctor.analysis.base import HostHints
 from llama_doctor.cli import EXIT_TOOL_ERROR, main
 
@@ -166,7 +167,7 @@ class TestCli(unittest.TestCase):
             main(["--version"])
 
         self.assertEqual(raised.exception.code, 0)
-        self.assertIn("llama-doctor 0.1.0", stdout.getvalue())
+        self.assertIn(f"llama-doctor {__version__}", stdout.getvalue())
 
     def test_probe_overrides_lifetime(self):
         timings = json.dumps({
