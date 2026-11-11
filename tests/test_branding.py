@@ -1,7 +1,13 @@
 import re
 import unittest
 import xml.etree.ElementTree as ET
+from fnmatch import fnmatch
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    tomllib = None
 
 from llama_doctor.dashboard.server import default_static_dir
 
@@ -21,7 +27,7 @@ class TestBranding(unittest.TestCase):
         self.static = default_static_dir()
         self.index = (self.static / "index.html").read_text(encoding="utf-8")
         self.app_css = (self.static / "app.css").read_text(encoding="utf-8")
-        self.svgs = (LOGO, DOCS_FAVICON)
+        self.svgs = (LOGO, DOCS_FAVICON, Path(str(self.static / "favicon.svg")))
 
     def test_readme_image_sources_exist(self):
         paths = re.findall(r'<img[^>]*\ssrc="((?:docs|src)/[^"]+)"', self.readme)
@@ -38,6 +44,14 @@ class TestBranding(unittest.TestCase):
                 '<h1 align="center">llama-doctor</h1>\n'
             )
         )
+
+    def test_index_favicon_link_resolves_to_shipped_file(self):
+        self.assertIn(
+            '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">', self.index
+        )
+        for value in re.findall(r'(?:src|href)="(/static/[^"]+)"', self.index):
+            with self.subTest(value=value):
+                self.assertTrue((self.static / value.removeprefix("/static/")).is_file())
 
     def test_svgs_parse_and_are_self_contained(self):
         for path in self.svgs:
@@ -61,6 +75,18 @@ class TestBranding(unittest.TestCase):
                     with self.subTest(token=token):
                         self.assertIn(css_token(self.app_css, token), text.lower())
                 self.assertIn("@media (prefers-color-scheme: light)", text)
+
+    def test_favicon_copies_are_identical(self):
+        self.assertEqual(
+            DOCS_FAVICON.read_bytes(), (self.static / "favicon.svg").read_bytes()
+        )
+
+    @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11")
+    def test_favicon_is_declared_package_data(self):
+        """The wheel/sdist includes the favicon without a build that is slow and needs network."""
+        data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        patterns = data["tool"]["setuptools"]["package-data"]["llama_doctor.dashboard"]
+        self.assertTrue(any(fnmatch("static/favicon.svg", p) for p in patterns))
 
 
 if __name__ == "__main__":

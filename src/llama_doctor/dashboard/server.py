@@ -17,6 +17,7 @@ STATIC_ROUTES: dict[str, str] = {
     "/": "index.html",
     "/static/app.css": "app.css",
     "/static/app.js": "app.js",
+    "/static/favicon.svg": "favicon.svg",
     "/static/vendor/chart.umd.js": "vendor/chart.umd.js",
 }
 CSP = (
@@ -138,6 +139,7 @@ def make_server(
                 ".html": "text/html; charset=utf-8",
                 ".css": "text/css; charset=utf-8",
                 ".js": "text/javascript; charset=utf-8",
+                ".svg": "image/svg+xml",
             }[Path(filename).suffix]
             headers = (
                 {"Content-Security-Policy": CSP, "Referrer-Policy": "no-referrer"}
