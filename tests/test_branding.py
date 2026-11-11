@@ -27,7 +27,7 @@ class TestBranding(unittest.TestCase):
         self.static = default_static_dir()
         self.index = (self.static / "index.html").read_text(encoding="utf-8")
         self.app_css = (self.static / "app.css").read_text(encoding="utf-8")
-        self.svgs = (LOGO, DOCS_FAVICON, Path(str(self.static / "favicon.svg")))
+        self.svgs = (LOGO, DOCS_FAVICON, self.static / "favicon.svg")
 
     def test_readme_image_sources_exist(self):
         paths = re.findall(r'<img[^>]*\ssrc="((?:docs|src)/[^"]+)"', self.readme)
