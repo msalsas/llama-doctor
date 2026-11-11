@@ -12,7 +12,7 @@ I read each of these directly in the worktree. Where the brief and the repo disa
 
 | Brief says | Repo actually has | Effect |
 |---|---|---|
-| README head: 5 badges (CI, Release, MIT, Python, Downloads), tagline "Local LLM doctor." | `# llama-doctor`, a blank line, the line *"A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured."*, a blank line, then **3** badges (CI, Python 3.10+, License MIT) | README edit is based on the real header (§2.3) |
+| README head: 5 badges (CI, Release, MIT, Python, Downloads), tagline "Local LLM doctor." | `# llama-doctor`, a blank line, the line *"A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured."*, a blank line, then **3** badges (CI, Python 3.10+, License MIT) | README edit is based on the real header (section 2.3) |
 | `index.html` has `.brand` / `.mark` / tagline; stylesheet `href="app.css"` | `<header class="header">`, `<strong class="product">`, `<link rel="stylesheet" href="/static/app.css">`, 2-space indent, no self-closing slashes | `<link>` must use `/static/...` (enforced by `tests/test_static.py::test_index_references_local_assets_only`) |
 | `pyproject.toml`: `dynamic = ["version"]`; package-data `llama_doctor = [...]` | static `version = "0.2.0"`; `[tool.setuptools.package-data] "llama_doctor.dashboard" = ["static/*", "static/vendor/*"]`; no `docs/assets` entry, no MANIFEST.in, no `readme =` field | Favicon ships through `static/*` with no pyproject change. Nothing under `docs/` ships. README is not used on PyPI. |
 | `test_linked_repo_paths_exist` regex `\]\(((?:docs\|src)/[^)#]+)(?:#...)?\)` | regex `\]\(((?:docs\|src)/[^)#]+\|LICENSE)\)` | This regex only checks Markdown links, not `<img src="...">`, so a new test is needed |
@@ -42,7 +42,7 @@ STATIC_ROUTES: dict[str, str] = {
 
 If only `static/favicon.svg` and the `<link>` are added, the browser's request to `/static/favicon.svg` returns **404** and the dashboard never shows the icon. A `data:` URI won't work either: `test_index_references_local_assets_only` requires every `href` to start with `/static/`.
 
-**Decision (needs orchestrator sign-off before Kimi starts step 4):** make the smallest possible change to `server.py`: one route entry and one MIME entry (§2.5). It's the only Python change. If sign-off is refused, drop scope item 4 completely: no `static/favicon.svg`, no `<link>`, no static/server tests. Do steps 1–3 and the README tests only. Don't ship a link that 404s.
+**Decision (needs orchestrator sign-off before Kimi starts step 4):** make the smallest possible change to `server.py`: one route entry and one MIME entry (section 2.5). It's the only Python change. If sign-off is refused, drop scope item 4 completely: no `static/favicon.svg`, no `<link>`, no static/server tests. Do steps 1-3 and the README tests only. Don't ship a link that 404s.
 
 ## 1. File list
 
@@ -53,7 +53,7 @@ If only `static/favicon.svg` and the `<link>` are added, the browser's request t
 | create | `src/llama_doctor/dashboard/static/favicon.svg` (byte-identical to `docs/assets/favicon.svg`) |
 | modify | `README.md` (header only) |
 | modify | `src/llama_doctor/dashboard/static/index.html` (one line) |
-| modify | `src/llama_doctor/dashboard/server.py` (two lines, **gated**, see §0) |
+| modify | `src/llama_doctor/dashboard/server.py` (two lines, **gated**, see section 0) |
 | create | `tests/test_branding.py` |
 | modify | `tests/test_server.py` (one test, gated with server.py) |
 
@@ -67,7 +67,7 @@ Use the **A-bold** candidate source from the brief, byte-for-byte, with no chang
 
 Use the **A-favicon** candidate source from the brief, byte-for-byte, with no changes. That includes the unused `.grid { ... display: none; }` rules: they're harmless, and keeping the file verbatim keeps it identical to what was measured. One trailing `\n`, ASCII only. Write it once, then `cp docs/assets/favicon.svg src/llama_doctor/dashboard/static/favicon.svg` so the two files are byte-identical.
 
-### 2.3 `README.md`: change lines 1–2 only
+### 2.3 `README.md`: change lines 1-2 only
 
 Current first line is `# llama-doctor`. New top of file, verbatim:
 
@@ -96,7 +96,7 @@ Put it directly after line 7, `  <link rel="stylesheet" href="/static/app.css">`
 
 Two-space indent, no closing `/`, same as the surrounding lines. Change nothing else.
 
-### 2.5 `src/llama_doctor/dashboard/server.py` (GATED, see §0)
+### 2.5 `src/llama_doctor/dashboard/server.py` (GATED, see section 0)
 
 Make exactly two additions:
 
@@ -166,7 +166,7 @@ Tests, with the reason each one is worth having:
 6. **`test_favicon_copies_are_identical`**: `assertEqual(DOCS_FAVICON.read_bytes(), (self.static / "favicon.svg").read_bytes())`. *Why:* stops the docs copy and the shipped copy from drifting apart.
 7. **`test_favicon_is_declared_package_data`**: `data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))`; `patterns = data["tool"]["setuptools"]["package-data"]["llama_doctor.dashboard"]`; `assertTrue(any(fnmatch("static/favicon.svg", p) for p in patterns))`. *Why:* it proves the wheel/sdist will include the file without running a build, which would be slow and need network access. Add a docstring stating that.
 
-### 3.2 `tests/test_server.py` (gated with §2.5): add after `test_static_allowlist`
+### 3.2 `tests/test_server.py` (gated with section 2.5): add after `test_static_allowlist`
 
 ```python
     def test_favicon_served_as_svg(self):
@@ -213,7 +213,7 @@ Push `feature/branding` and open a PR against `main` only after the orchestrator
   - Tests added, and the verify commands with their results.
   - Not verified: GitHub's light/dark rendering of the SVG.
   - Out of scope: the 0.1.0/0.2.0 version drift.
-  - End the body with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+  - End the body with ` Generated with [Claude Code](https://claude.com/claude-code)`.
 
 ## 6. Do not touch
 
@@ -231,15 +231,15 @@ Push `feature/branding` and open a PR against `main` only after the orchestrator
 ## 7. Risks
 
 - **CI breakage:**
-  - `tomllib` is missing on Python 3.10. CI only runs 3.11 and 3.13, and the test suite already assumes ≥3.10. If 3.10 is ever added to CI, test 7 will fail at import. *Mitigation if that happens: wrap the import with `skipUnless`.* Not needed today.
-  - Ruff on the new test: default rules (E4/E7/E9/F) and line-length 100. Keep lines ≤100.
+  - `tomllib` is missing on Python 3.10. CI only runs 3.11 and 3.13, and the test suite already assumes >=3.10. If 3.10 is ever added to CI, test 7 will fail at import. *Mitigation if that happens: wrap the import with `skipUnless`.* Not needed today.
+  - Ruff on the new test: default rules (E4/E7/E9/F) and line-length 100. Keep lines <=100.
   - `test_readme_logo_sits_alone_above_title` breaks if anyone edits the logo line. That's on purpose.
 - **Not verified:**
   - That GitHub's README renderer honours `prefers-color-scheme` inside an SVG loaded with `<img>`. Browsers generally do, but GitHub may proxy or sanitise it. Worst case, the dark tile shows on light themes, which is still legible.
   - Safari's support for SVG favicons (older Safari ignores them, so no icon, but nothing breaks).
   - The contrast and coverage numbers in the brief. I used them as given and didn't re-render.
   - That `gh` PR numbers #7 and #8 exist. My `gh pr list` call wasn't approved; I saw only local branches `feature/agentcheck`, `feature/branding`, `main`.
-- **Scope deviation:** the two `server.py` lines (§0). Without them, scope item 4 can't work.
+- **Scope deviation:** the two `server.py` lines (section 0). Without them, scope item 4 can't work.
 
 ---
 
@@ -250,18 +250,18 @@ Audited live in this worktree on 2026-11-11, against `feature/branding` at `2058
 Opus's contract; Part 2 is the orchestrator's fact-check and the decisions only the orchestrator
 can make. Implement Part 1 as amended by Part 2, then archive both.
 
-## A1 — Gate signed off
+## A1 - Gate signed off
 
 Section 0's blocker is real and the decision is approved: `src/llama_doctor/dashboard/server.py`
-gets exactly the two additions in §2.5 (one `STATIC_ROUTES` entry, one MIME entry), plus the one
-test in §3.2. Commit 3 proceeds. This is the only Python change allowed in the branch.
+gets exactly the two additions in section 2.5 (one `STATIC_ROUTES` entry, one MIME entry), plus the one
+test in section 3.2. Commit 3 proceeds. This is the only Python change allowed in the branch.
 
-## A2 — Facts confirmed by the orchestrator (independent read, same worktree)
+## A2 - Facts confirmed by the orchestrator (independent read, same worktree)
 
 - `README.md` first lines: `# llama-doctor`, blank, the sentence "A command-line tool that reads a
   running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured.",
   blank, then exactly 3 badges (CI, Python 3.10+, License: MIT). Part 1 is right; the brief's
-  README excerpt was wrong (it was reconstructed, not read — do not trust the brief's excerpts).
+  README excerpt was wrong (it was reconstructed, not read - do not trust the brief's excerpts).
 - `index.html` head: `<title>llama-doctor</title>`, `<link rel="stylesheet" href="/static/app.css">`,
   2-space indent, no self-closing slashes. Part 1 is right.
 - `pyproject.toml`: static `version = "0.2.0"` (NOT dynamic), `authors = [{name = "Manolo Alsas"}]`
@@ -270,23 +270,23 @@ test in §3.2. Commit 3 proceeds. This is the only Python change allowed in the 
   `target-version = "py310"`, `requires-python = ">=3.10"`.
 - `src/llama_doctor/dashboard/server.py`: `STATIC_ROUTES` at line 16 and the `content_type` dict at
   line 137 exactly as quoted in Part 1; `default_static_dir()` is defined at line 38.
-- `tests/test_readme.py:100` regex is `r"\]\(((?:docs|src)/[^)#]+|LICENSE)\)"` — Markdown links and
-  `LICENSE` only, so an `<img src>` reference is indeed unchecked today and §3.1 test 1 earns its
+- `tests/test_readme.py:100` regex is `r"\]\(((?:docs|src)/[^)#]+|LICENSE)\)"` - Markdown links and
+  `LICENSE` only, so an `<img src>` reference is indeed unchecked today and section 3.1 test 1 earns its
   keep.
 - `tests/test_server.py`: `setUp` builds a temp static root (`index.html`, `app.css`, `app.js`,
   `vendor/chart.umd.js`), `_request(method, path, ...)` returns `(status, headers, body)`, and
-  `test_static_allowlist` is at line 99. §3.2's new test fits as written; put it right after that
+  `test_static_allowlist` is at line 99. section 3.2's new test fits as written; put it right after that
   test.
 - `tests/test_readme.py` imports via `from .support import make_context`, so `tests/` is a package;
   the new test module lives in `tests/` and needs no relative imports.
 
-## A3 — Attribution overrides (repo convention, non-negotiable)
+## A3 - Attribution overrides (repo convention, non-negotiable)
 
-Delete the `Co-Authored-By: Claude ...` requirement from §5. Commit messages carry no AI
+Delete the `Co-Authored-By: Claude ...` requirement from section 5. Commit messages carry no AI
 attribution of any kind: plain imperative subject, body only when the change needs one (see
 `git log`). The PR body must not end with the "Generated with Claude Code" line either.
 
-## A4 — Python-version guard in test 7
+## A4 - Python-version guard in test 7
 
 `requires-python = ">=3.10"` but `tomllib` is 3.11+. In `test_favicon_is_declared_package_data`
 use:
@@ -301,27 +301,27 @@ except ModuleNotFoundError:  # Python 3.10
 and decorate the test with `@unittest.skipIf(tomllib is None, "tomllib requires Python 3.11")`.
 Everything else stays stdlib-only and 3.10-safe.
 
-## A5 — Toolchain inside the sandbox
+## A5 - Toolchain inside the sandbox
 
-`python` may not exist here; use `python3` in every §4 command. `ruff` is NOT installed in the
+`python` may not exist here; use `python3` in every section 4 command. `ruff` is NOT installed in the
 sandbox: skip `ruff check`, the orchestrator runs it outside the sandbox after your commits.
 Keep every line at or under 100 characters (`target-version = "py310"`, ruff line-length 100).
 Zero comments in new code unless one carries information the code cannot express.
 
-## A6 — Archive location
+## A6 - Archive location
 
 Repo convention is `docs/contracts/T<n>-<topic>.md` (T1-core .. T5-dashboard). Archive as
 `docs/contracts/T6-branding.md`: copy this transport file verbatim from the standalone line
 `=== CONTRACT (PART 1) ===` onward, including Part 2 and Part 3, then delete the transport file. It
 is commit 1's companion file, in the same commit as the two `docs/assets/*.svg` files.
 
-## A7 — Boundaries
+## A7 - Boundaries
 
 Commit on `feature/branding` only. No `git push`, no `gh pr create`, no PR comments, no branch
 switching, no `git stash`, no touching `feature/agentcheck` or `main` or PRs #7/#8. Report back
 instead; the orchestrator handles review, remote and PR.
 
-## A8 — Byte-exact assets
+## A8 - Byte-exact assets
 
 The only authoritative SVG sources are Part 3 of this file. Copy between the BEGIN/END markers
 character-for-character: no reflow, no added comments, no attribute reordering, exactly one
@@ -329,11 +329,11 @@ trailing newline, ASCII only. Then `cp docs/assets/favicon.svg
 src/llama_doctor/dashboard/static/favicon.svg` so the two are byte-identical (`cmp` must pass).
 Do not regenerate or "improve" the art: the geometry is what was measured.
 
-## A9 — Header layout replaces §2.3 (verified pattern, do not revert)
+## A9 - Header layout replaces section 2.3 (verified pattern, do not revert)
 
 Use the stacked-centred header that has been measured to survive GitHub's sanitizer (inline
 `<img>` beside an `h1` cannot be centred because GitHub forces `vertical-align:
--webkit-baseline-middle`; tables render visible borders). Replace §2.3's block, the README's first
+-webkit-baseline-middle`; tables render visible borders). Replace section 2.3's block, the README's first
 two lines becoming:
 
 ```markdown
@@ -343,7 +343,7 @@ two lines becoming:
 ```
 
 Everything from the blank line after that heading down stays byte-identical (description sentence,
-3 badges, the rest of the file). §3.1 test 2 therefore asserts instead:
+3 badges, the rest of the file). section 3.1 test 2 therefore asserts instead:
 
 ```python
     def test_readme_header_layout(self):
@@ -356,13 +356,13 @@ Everything from the blank line after that heading down stays byte-identical (des
         )
 ```
 
-Keep §3.1 test 1 unchanged; its `<img ... src>` regex still matches the wrapped tag. Rename the
+Keep section 3.1 test 1 unchanged; its `<img ... src>` regex still matches the wrapped tag. Rename the
 test as shown and keep the reason comment in the contract record.
 
 
 ---
 
-ASSET SOURCES (PART 3) — these are the measured candidate sources the contract refers to as "from the brief". Copy between the markers character-for-character; each file ends with exactly one newline.
+ASSET SOURCES (PART 3) - these are the measured candidate sources the contract refers to as "from the brief". Copy between the markers character-for-character; each file ends with exactly one newline.
 
 ### docs/assets/logo-mark.svg (source id A-bold)
 
@@ -415,9 +415,9 @@ ASSET SOURCES (PART 3) — these are the measured candidate sources the contract
 </svg>
 <<<END A-favicon>>>
 
-=== RECORD 2 — version single-source ===
+=== RECORD 2 - version single-source ===
 
-# TRANSPORT FILE — version single-source fix (second task on branch feature/branding)
+# TRANSPORT FILE - version single-source fix (second task on branch feature/branding)
 
 Part 1 below (after `=== SPEC (PART 1) ===`) is the architect's spec. Part 2 is the orchestrator's
 audit and overrides, and WINS where they contradict. Part 3 is repo ground truth the orchestrator
@@ -425,15 +425,15 @@ read live from this same worktree.
 
 ## ORCHESTRATOR AUDIT AND OVERRIDES (PART 2)
 
-- **O1 — Scope cut.** The author-metadata change (§5 of the spec) is HELD: the repo consistently
+- **O1 - Scope cut.** The author-metadata change (section 5 of the spec) is HELD: the repo consistently
   says "Manolo Alsas" (pyproject.toml, LICENSE, git config) and the orchestrator's assumption that
   it should be "Salsas" was an inference from the GitHub handle, not a fact. The user has not
   confirmed a spelling yet. So: do NOT touch the `authors` line in `pyproject.toml`, do NOT touch
   `LICENSE`, do NOT change any git identity. One commit only, the version fix.
-- **O2 — No attribution.** Drop both `Co-Authored-By: Claude ...` trailers and the
-  `Generated with Claude Code` footer from §6. Repo convention: plain imperative subject, body only
+- **O2 - No attribution.** Drop both `Co-Authored-By: Claude ...` trailers and the
+  `Generated with Claude Code` footer from section 6. Repo convention: plain imperative subject, body only
   when the change needs one. Keep the subject and body text the spec proposes.
-- **O3 — Confirmed by the orchestrator, live in this worktree.** `[build-system]
+- **O3 - Confirmed by the orchestrator, live in this worktree.** `[build-system]
   requires = ["setuptools>=77"]` (so the dynamic-attr path is supported); `tests/test_scaffold.py`
   currently contains exactly one test (`test_version` pinning 0.1.0), so replacing the whole file
   with the spec's version loses nothing; the two golden strings in `tests/test_terminal.py` (lines
@@ -442,28 +442,28 @@ read live from this same worktree.
   `__version__`, which is why the goldens break if you bump the version without touching them;
   `jsondoc.py:27` and `dashboard/sampler.py:250` also report `__version__`, so the stale 0.1.0
   leaks into `--json` and the dashboard `/state`, not just `--version`.
-- **O4 — Tag fact now confirmed by the orchestrator** (the spec could not check it): the remote tag
+- **O4 - Tag fact now confirmed by the orchestrator** (the spec could not check it): the remote tag
   `v0.2.0` exists and points at `2058683` ("Version 0.2.0"), the current `main`. So the published
   release does report 0.1.0 from the CLI, `--json` and `/state`. Do not move, delete or re-push any
   tag; just record the fact. It belongs in the PR description.
-- **O5 — Toolchain.** `python3` everywhere (no `python` alias here). `ruff` is not installed in the
-  sandbox: skip `ruff check`, the orchestrator runs it outside. Keep lines ≤ 100 characters. No
+- **O5 - Toolchain.** `python3` everywhere (no `python` alias here). `ruff` is not installed in the
+  sandbox: skip `ruff check`, the orchestrator runs it outside. Keep lines <= 100 characters. No
   comments in code unless one carries information the code cannot express.
-- **O6 — Venv check adjustment.** §7's editable-install check asserts `Author == "Manolo Salsas"`:
+- **O6 - Venv check adjustment.** section 7's editable-install check asserts `Author == "Manolo Salsas"`:
   drop that assertion (metadata unchanged per O1) and keep the version equality plus the CLI probe.
-  It needs PyPI for build isolation; if the network blocks it, report that the step did not run —
+  It needs PyPI for build isolation; if the network blocks it, report that the step did not run -
   do not substitute a weaker claim.
-- **O7 — Boundaries.** Work on `feature/branding` in this worktree, on top of the three existing
+- **O7 - Boundaries.** Work on `feature/branding` in this worktree, on top of the three existing
   branding commits. No `git push`, no `gh`, no PR, no branch switch, no `git stash`, no `git
   config`, no tag operations. `README.md` line 48 stays as printed (it is a captured 0.1.0
   transcript; changing one line of it would mix runs). Delete this transport file at the end and
   leave `git status --porcelain` empty.
-- **O8 — Archive.** Append the spec (Part 1) plus this Part 2 and Part 3 to
-  `docs/contracts/T6-branding.md` as a clearly delimited second record ("Record 2 — version
+- **O8 - Archive.** Append the spec (Part 1) plus this Part 2 and Part 3 to
+  `docs/contracts/T6-branding.md` as a clearly delimited second record ("Record 2 - version
   single-source"), in the same commit as the fix. The existing 416-line record stays byte-identical.
 
-Work order: apply the §2 edits except the author line; rewrite `tests/test_scaffold.py` with the
-guard; run §7's verify list as amended by O5 and O6 (skip the Alsas grep for `Salsas`; the
+Work order: apply the section 2 edits except the author line; rewrite `tests/test_scaffold.py` with the
+guard; run section 7's verify list as amended by O5 and O6 (skip the Alsas grep for `Salsas`; the
 `0\.1\.0` grep must come back empty except `./README.md:48:`); commit once with the spec's message
 minus trailers; report `git show --stat`, each command with exit code and test counts, and anything
 you could not run. If the full suite fails in a way the spec did not anticipate, stop and report.
@@ -480,7 +480,7 @@ you could not run. If the full suite fails in a way the spec did not anticipate,
   - `README.md:48`: sample output, `llama-doctor 0.1.0  http://laptop-msi:8888`
 - **The version is also used by `--json` and the dashboard.** `src/llama_doctor/render/jsondoc.py:27` and `src/llama_doctor/dashboard/sampler.py:250` read `__version__`. So the 0.1.0 also shows up in `--json` output and the dashboard `/state`, not only in `--version`.
 - **No publish step exists.** `.github/workflows/` contains only `ci.yml`, and there is no PyPI or wheel-build workflow, so nothing builds a release wheel from `pyproject.toml`. CI does run `pip install -e . ruff`, which means CI builds the package metadata on every run.
-- **The author name has a second hit:** `LICENSE:3`. Also, local `git config user.name` is "Manolo Alsas", so new commits will keep the old spelling until the orchestrator changes it (see §5).
+- **The author name has a second hit:** `LICENSE:3`. Also, local `git config user.name` is "Manolo Alsas", so new commits will keep the old spelling until the orchestrator changes it (see section 5).
 
 ## 1. Which fix
 
@@ -488,7 +488,7 @@ you could not run. If the full suite fails in a way the spec did not anticipate,
 
 The trade-off:
 - **Just bumping `__init__.py`** fixes today's mismatch, but every future release still means editing two files that can drift apart again.
-- **Reading the version from the code** leaves `__init__.py` as the only place the version is written, and the CLI, JSON output and dashboard already read from there. The cost is a three-line setuptools table. setuptools ≥77 (already required) reads the literal `__version__ = "..."` without importing the package. There is no PyPI artifact or release pipeline to adapt, and CI's `pip install -e .` already tests this build path on every push.
+- **Reading the version from the code** leaves `__init__.py` as the only place the version is written, and the CLI, JSON output and dashboard already read from there. The cost is a three-line setuptools table. setuptools >=77 (already required) reads the literal `__version__ = "..."` without importing the package. There is no PyPI artifact or release pipeline to adapt, and CI's `pip install -e .` already tests this build path on every push.
 
 ## 2. Version edits
 
@@ -530,7 +530,7 @@ version = {attr = "llama_doctor.__version__"}
 [tool.setuptools.package-data]
 ```
 
-**`tests/test_scaffold.py`**: this stays the one deliberate place where a test spells out the version; the guard from §3 goes in the same file. Replace the whole file with:
+**`tests/test_scaffold.py`**: this stays the one deliberate place where a test spells out the version; the guard from section 3 goes in the same file. Replace the whole file with:
 ```python
 import re
 import unittest
@@ -600,7 +600,7 @@ from llama_doctor.analysis import diagnose
 
 ## 3. Guard against drift coming back
 
-After §2, the version can't be set in two places, because `pyproject.toml` no longer has its own. The real risk is someone adding a static `version = "x.y.z"` back. `test_pyproject_takes_version_from_package` (in §2) catches that:
+After section 2, the version can't be set in two places, because `pyproject.toml` no longer has its own. The real risk is someone adding a static `version = "x.y.z"` back. `test_pyproject_takes_version_from_package` (in section 2) catches that:
 - It fails if any `^version =` line other than the `attr` line appears, or if `dynamic = ["version"]` is removed.
 - It uses only `re` and `pathlib`, with no `tomllib` (that is 3.11+), so it runs on 3.10.
 
@@ -671,7 +671,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ```
    Files: `pyproject.toml` (authors line), `LICENSE`.
 
-**PR description:** mention the v0.2.0 tag finding from §4 and end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+**PR description:** mention the v0.2.0 tag finding from section 4 and end with ` Generated with [Claude Code](https://claude.com/claude-code)`.
 
 ## 7. Verify commands
 
@@ -689,14 +689,14 @@ If `pip install` in the venv can't reach PyPI to fetch `setuptools>=77` for the 
 
 ## Risks
 - **The released tag is wrong:** if v0.2.0 points to 2058683, its source reports 0.1.0, and this fix only corrects `main` going forward.
-- **Older pip:** `{attr = ...}` needs build isolation to pick up setuptools ≥77. A pip that is too old to honour `[build-system]` would fail to build. CI's pinned `setup-python@v5` is fine.
+- **Older pip:** `{attr = ...}` needs build isolation to pick up setuptools >=77. A pip that is too old to honour `[build-system]` would fail to build. CI's pinned `setup-python@v5` is fine.
 - **Python 3.10 isn't tested in CI:** the matrix runs 3.11 and 3.13 although `requires-python = ">=3.10"`. The new test avoids `tomllib`, but nothing in CI proves 3.10 works.
 - **The guard is a text match:** reformatting the `attr` line (spacing, quote style) fails `test_pyproject_takes_version_from_package`. That is a false alarm, not missed drift.
-- **New commits keep the old spelling:** they will still show "Alsas" unless the orchestrator overrides `user.name` (§5).
+- **New commits keep the old spelling:** they will still show "Alsas" unless the orchestrator overrides `user.name` (section 5).
 
 ---
 
-REPO GROUND TRUTH (PART 3) — read live in this worktree at HEAD of feature/branding (three branding commits on top of main = 2058683)
+REPO GROUND TRUTH (PART 3) - read live in this worktree at HEAD of feature/branding (three branding commits on top of main = 2058683)
 
 ```
 [build-system]
@@ -743,6 +743,6 @@ src/llama_doctor/render/terminal.py:4:from llama_doctor import __version__
 src/llama_doctor/render/terminal.py:66:        f"llama-doctor {__version__}  {target}",
 ```
 
-<<<END Record 2 — version single-source>>>
+<<<END Record 2 - version single-source>>>
 ### Record 2 addendum (orchestrator override O9, 2026-11-11)  Spec 2 said to leave the README sample version at 0.1.0 on the grounds that it is a captured transcript. That is wrong for this repo: tests/test_readme.py's test_quick_start_example_matches_rendered_fixture renders the readme_example fixture through render_report and asserts byte equality with the README fenced block, and render_report reads __version__ for its first line. Bumping the version therefore forces the sample version token to move to 0.2.0 in the same commit.
 ### Record 2 addendum (architect review R2, 2026-11-11)  The regex guard specified in Record 2 was replaced by the TOML-parsing guard proposed in the architect review: the regex matched any version = line anywhere in the file and failed on harmless reformatting. The replacement skips on Python 3.10, where tomllib is absent, and both CI versions (3.11 and 3.13) run it. Note that CI does not run 3.10 at all despite requires-python. The review also added assertions that the --json diagnosis document and the dashboard state report the package version, the two reporting paths that stayed silent during the drift.
