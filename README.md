@@ -1,4 +1,6 @@
-# llama-doctor
+<p align="center"><img src="docs/assets/logo-mark.svg" alt="llama-doctor logo" width="96" height="96"></p>
+
+<h1 align="center">llama-doctor</h1>
 
 A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured.
 
