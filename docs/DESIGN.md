@@ -70,9 +70,19 @@ error: it sets `ServerSnapshot.slots_error` and leaves the rest untouched.
 
 In router mode `--model NAME` sets `LlamaClient.model`. Only `/metrics`
 carries it, as `?model=` with the name percent-encoded. Error keys stay
-`/metrics`. The base URL still may not contain `?`, and `--probe` is
-refused with `--model` because `/completion` would need the model in the
-body.
+`/metrics`. The base URL still may not contain `?`.
+
+The probe measures completions through route discovery: `LlamaClient.complete`
+POSTs to `/v1/completions`, `/v1/chat/completions` and `/completion` in that
+order and caches the first route whose `timings` parse, per client instance.
+Statuses 400/404/405/422/501 and body-shape failures (`invalid JSON`,
+`no timings in response`, `unusable timings`) fall through to the next route;
+timeouts, connection errors, 401/403/429 and 5xx stop discovery and surface
+the recorded attempts. Once a route is cached, later calls use it only and a
+failure re-raises the plain `FetchError`. The OpenAI-style routes carry the
+model id from `/v1/models` in the JSON body; `/completion` never does.
+`--probe` is refused with `--model` because `/completion` would need the
+model in the body.
 
 Raw JSON payloads exist only as local variables inside `client.py`. No public
 function returns them, stores them, or puts them in an exception.

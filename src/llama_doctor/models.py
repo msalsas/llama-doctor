@@ -322,6 +322,14 @@ class EndpointError:
 
 
 @dataclass(frozen=True)
+class ProbeSkip:
+    stage: str  # "discovery" | "measure" | "timings"
+    reason: str
+    route: str | None = None
+    attempts: tuple[EndpointError, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProbeResult:
     prefill_tps: float
     decode_tps: float

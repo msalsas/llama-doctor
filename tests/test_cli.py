@@ -181,7 +181,7 @@ class TestCli(unittest.TestCase):
         with FakeLlamaServer() as server:
             _set_routes(server)
             server.set_route("/completion", 200, timings, "application/json")
-            result, stdout, _ = self._run(["diagnose", server.url, "--probe", "--json"])
+            result, stdout, stderr = self._run(["diagnose", server.url, "--probe", "--json"])
 
         document = json.loads(stdout)
         self.assertEqual(result, 1)
@@ -191,6 +191,27 @@ class TestCli(unittest.TestCase):
             [finding["code"] for finding in document["findings"]],
         )
         self.assertEqual(sum(request[1] == "/completion" for request in server.requests), 2)
+        self.assertIn("probe: route /completion", stderr)
+
+    def test_probe_reports_route(self):
+        timings = json.dumps({
+            "timings": {
+                "prompt_n": 1200,
+                "prompt_ms": 1500.0,
+                "predicted_n": 64,
+                "predicted_ms": 3200.0,
+            }
+        })
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            for route in ("/v1/completions", "/v1/chat/completions", "/completion"):
+                server.set_route(route, 200, timings, "application/json")
+            result, _, stderr = self._run(["diagnose", server.url, "--probe"])
+
+        self.assertEqual(result, 1)
+        self.assertIn("probe: route /v1/completions\n", stderr)
+        self.assertNotIn("/v1/chat/completions", stderr)
+        self.assertNotIn("probe: measured prompt failed", stderr)
 
     def test_probe_failure_falls_back(self):
         with FakeLlamaServer() as server:
@@ -202,7 +223,12 @@ class TestCli(unittest.TestCase):
             "probe: warm-up plus one synthetic prompt (prefix cache disabled)",
             stderr,
         )
-        self.assertIn("probe: failed", stderr)
+        self.assertIn(
+            "probe: no usable completion route (/v1/completions: HTTP 404; "
+            "/v1/chat/completions: HTTP 404; /completion: HTTP 404), using lifetime counters",
+            stderr,
+        )
+        self.assertNotIn("probe: route", stderr)
 
     def test_probe_is_skipped_when_server_is_dead(self):
         with FakeLlamaServer() as server:

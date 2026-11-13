@@ -35,6 +35,73 @@ class FetchError(Exception):
         return EndpointError(endpoint=self.endpoint, status=self.status, reason=self.reason)
 
 
+class ProbeRouteError(FetchError):
+    def __init__(self, attempts: tuple[EndpointError, ...]) -> None:
+        self.attempts = attempts
+        super().__init__(attempts[-1].endpoint, "no usable completion route", status=None)
+
+
+COMPLETION_ROUTES: tuple[str, ...] = ("/v1/completions", "/v1/chat/completions", "/completion")
+_FALLTHROUGH_STATUSES: frozenset[int] = frozenset({400, 404, 405, 422, 501})
+_FALLTHROUGH_REASONS: frozenset[str] = frozenset(
+    {"invalid JSON", "no timings in response", "unusable timings"}
+)
+
+
+def _completion_body(
+    route: str, prompt: str, n_predict: int, model_id: str | None
+) -> dict[str, Any]:
+    if route == "/v1/completions":
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "max_tokens": n_predict,
+            "temperature": 0,
+            "stream": False,
+        }
+        if model_id is not None:
+            body["model"] = model_id
+        return body
+    if route == "/v1/chat/completions":
+        body = {
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": n_predict,
+            "temperature": 0,
+            "stream": False,
+        }
+        if model_id is not None:
+            body["model"] = model_id
+        return body
+    return {
+        "prompt": prompt,
+        "n_predict": n_predict,
+        "cache_prompt": False,
+        "temperature": 0,
+        "stream": False,
+    }
+
+
+def _parse_timings(route: str, decoded: Any) -> CompletionTimings:
+    timings = decoded.get("timings") if isinstance(decoded, dict) else None
+    if not isinstance(timings, dict):
+        raise FetchError(route, "no timings in response")
+    prompt_n = safe_int(timings.get("prompt_n"))
+    prompt_ms = safe_float(timings.get("prompt_ms"))
+    predicted_n = safe_int(timings.get("predicted_n"))
+    predicted_ms = safe_float(timings.get("predicted_ms"))
+    if None in (prompt_n, prompt_ms, predicted_n, predicted_ms):
+        raise FetchError(route, "unusable timings")
+    return CompletionTimings(
+        prompt_n=prompt_n,
+        prompt_ms=prompt_ms,
+        predicted_n=predicted_n,
+        predicted_ms=predicted_ms,
+    )
+
+
+def _falls_through(exc: FetchError) -> bool:
+    return exc.status in _FALLTHROUGH_STATUSES or exc.reason in _FALLTHROUGH_REASONS
+
+
 def normalize_base_url(url: str) -> str:
     if "?" in url or "#" in url:
         raise ValueError("base URL must not contain '?' or '#'")
@@ -77,6 +144,7 @@ class LlamaClient:
         self._timeout = timeout
         self._clock = clock
         self._opener = urllib.request.build_opener(_NoRedirect())
+        self._completion_route: str | None = None
 
     @property
     def base_url(self) -> str:
@@ -85,6 +153,10 @@ class LlamaClient:
     @property
     def model(self) -> str | None:
         return self._model
+
+    @property
+    def completion_route(self) -> str | None:
+        return self._completion_route
 
     def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
@@ -191,23 +263,27 @@ class LlamaClient:
             slots_error=slots_error,
         )
 
-    def complete(self, prompt: str, n_predict: int) -> CompletionTimings:
-        payload = {
-            "prompt": prompt,
-            "n_predict": n_predict,
-            "cache_prompt": False,
-            "temperature": 0,
-            "stream": False,
-        }
-        decoded = self._fetch_json(
-            "/completion", data=json.dumps(payload).encode("utf-8")
-        )
-        timings = decoded.get("timings") if isinstance(decoded, dict) else None
-        if not isinstance(timings, dict):
-            raise FetchError("/completion", "no timings in response")
-        return CompletionTimings(
-            prompt_n=safe_int(timings.get("prompt_n")),
-            prompt_ms=safe_float(timings.get("prompt_ms")),
-            predicted_n=safe_int(timings.get("predicted_n")),
-            predicted_ms=safe_float(timings.get("predicted_ms")),
-        )
+    def complete(
+        self, prompt: str, n_predict: int, *, model_id: str | None = None
+    ) -> CompletionTimings:
+        if self._completion_route is not None:
+            return self._complete_on(self._completion_route, prompt, n_predict, model_id)
+        attempts: list[EndpointError] = []
+        for route in COMPLETION_ROUTES:
+            try:
+                timings = self._complete_on(route, prompt, n_predict, model_id)
+            except FetchError as exc:
+                attempts.append(exc.to_endpoint_error())
+                if not _falls_through(exc):
+                    raise ProbeRouteError(tuple(attempts)) from None
+                continue
+            self._completion_route = route
+            return timings
+        raise ProbeRouteError(tuple(attempts))
+
+    def _complete_on(
+        self, route: str, prompt: str, n_predict: int, model_id: str | None
+    ) -> CompletionTimings:
+        payload = _completion_body(route, prompt, n_predict, model_id)
+        decoded = self._fetch_json(route, data=json.dumps(payload).encode("utf-8"))
+        return _parse_timings(route, decoded)
