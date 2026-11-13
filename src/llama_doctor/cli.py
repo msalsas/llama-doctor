@@ -130,8 +130,10 @@ def _api_key(name: str | None) -> Secret | None:
 
 def _client(args: argparse.Namespace) -> LlamaClient | None:
     try:
+        # agentcheck has no --model: it checks the model the server has loaded.
+        model = getattr(args, "model", None)
         return LlamaClient(
-            args.url, api_key=_api_key(args.api_key_env), timeout=args.timeout, model=args.model
+            args.url, api_key=_api_key(args.api_key_env), timeout=args.timeout, model=model
         )
     except ValueError as exc:
         print(f"llama-doctor: {exc}", file=sys.stderr)
