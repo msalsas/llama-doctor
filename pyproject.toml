@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llama-doctor"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Non-invasive health diagnosis for local LLM inference servers via /metrics and /props."
-authors = [{name = "Manolo Alsas"}]
+authors = [{name = "Manolo Salsas"}]
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = []
@@ -16,6 +16,9 @@ llama-doctor = "llama_doctor.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "llama_doctor.__version__"}
 
 [tool.setuptools.package-data]
 "llama_doctor.dashboard" = ["static/*", "static/vendor/*"]

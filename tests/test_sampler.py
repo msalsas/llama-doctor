@@ -2,6 +2,7 @@ import json
 import time
 import unittest
 
+from llama_doctor import __version__
 from llama_doctor.analysis.base import AnalyzerSpec
 from llama_doctor.dashboard.sampler import POINT_KEYS, Sampler, _delta_rate, delta_point
 from llama_doctor.models import EndpointError, MetricsSnapshot, ServerSnapshot
@@ -335,6 +336,13 @@ class TestSampler(unittest.TestCase):
         self.assertEqual(len(history), 1)
         for key in POINT_KEYS[1:6]:
             self.assertIsNone(history[0][key])
+
+    def test_state_reports_package_version(self):
+        sampler = Sampler(lambda: _snapshot(_metrics(PREVIOUS)), target="http://server")
+        sampler.tick()
+
+        state = sampler.state()
+        self.assertEqual(state["version"], __version__)
 
     def test_state_keys_exact(self):
         sampler = Sampler(lambda: _snapshot(_metrics(PREVIOUS)), target="http://server")

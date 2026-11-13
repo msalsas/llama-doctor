@@ -1,4 +1,6 @@
-# llama-doctor
+<p align="center"><img src="docs/assets/logo-mark.svg" alt="llama-doctor logo" width="96" height="96"></p>
+
+<h1 align="center">llama-doctor</h1>
 
 A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured.
 
@@ -47,7 +49,7 @@ llama-doctor diagnose http://laptop-msi:8888 --api-key-env UNSLOTH_API_KEY
 The URL is the server origin, optionally with a reverse-proxy prefix. A base ending in `/v1` or a full `/v1/chat/completions` URL is trimmed to the origin or prefix; other API paths such as `/v1/models` are rejected.
 
 ```text
-llama-doctor 0.1.0  http://laptop-msi:8888
+llama-doctor 0.2.0  http://laptop-msi:8888
 model  Qwen3.8-Flash-Next-GGUF  quant UD-Q3_K_XL  ctx 80128  slots 1  build unsloth-studio/v0.1.908-beta
 
 rates (lifetime averages)
@@ -138,11 +140,13 @@ Exit codes: `0` all checks pass, `1` warnings only, `2` a phase failed, `3` tool
 | --- | --- |
 | `--json` | Print findings as JSON instead of text. |
 | `--probe` | Send a warm-up and one synthetic completion request to measure real latency. |
+| `--probe-budget SEC` | Total time allowed for `--probe` (default `300`). The warm-up divides it evenly across the completion routes tried and the measured prompt gets the rest; slow servers get a smaller prompt that is still reliable. |
 | `--vram-gib N` | GPU memory available, used by the memory estimate. |
 | `--ram-gib N` | System RAM available for offloaded weights. |
 | `--weights-gib N` | Model weight size in GiB, used only when the server does not report it; the memory finding then shows `weights_source: hint`. |
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
-| `--timeout SEC` | HTTP timeout per request. |
+| `--model NAME` | For a llama-server in router mode (several models behind one URL): read `/metrics` for model `NAME` by sending `GET /metrics?model=NAME`. `/props`, `/v1/models` and `/slots` are read as usual. Cannot be combined with `--probe` (exit 3). |
+| `--timeout SEC` | HTTP timeout per request. `--probe` requests use `--probe-budget` instead. |
 | `--no-color` | Disable ANSI colour in text output. |
 | `--no-slots` | Do not read `GET /slots` (live context and the KV estimate in findings). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
 
@@ -160,6 +164,7 @@ In `diagnose`, `--probe` is off by default and is the only option that sends a w
 | `--vram-gib N` | GPU memory available, same as in `diagnose`; without it the memory check stays N/A on the dashboard. |
 | `--ram-gib N` | System RAM available for offloaded weights, same as in `diagnose`. |
 | `--weights-gib N` | Model weight size in GiB, same as in `diagnose`; the size reported by the server wins when present. |
+| `--model NAME` | Router mode model whose `/metrics` the dashboard polls, same as in `diagnose`. |
 | `--no-slots` | Do not poll `GET /slots`, same as in `diagnose`; the context tile then shows only the peak. |
 
 `serve` also accepts `--api-key-env` and `--timeout`.

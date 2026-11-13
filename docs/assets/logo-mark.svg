@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="llama-doctor">
+  <style>
+    .bg { fill: #121211; }
+    .ink { fill: none; stroke: #f0efec; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
+    .grid { fill: none; stroke: #2a2a28; stroke-width: 3.5; stroke-linecap: round; }
+    .warn { fill: none; stroke: #fab219; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
+    .crit { fill: #d03b3b; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #f0efec; }
+      .ink { fill: none; stroke: #2a2a28; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
+      .grid { fill: none; stroke: #c3c2b7; stroke-width: 3.5; stroke-linecap: round; }
+      .warn { fill: none; stroke: #8b6003; stroke-width: 7.5; stroke-linecap: round; stroke-linejoin: round; }
+      .crit { fill: #c73030; }
+    }
+  </style>
+  <rect x="4" y="4" width="88" height="88" rx="22" class="bg"/>
+  <path class="grid" d="M22 34 H74 M22 62 H74"/>
+  <path class="ink" d="M16 62 H29 L35 49 L44 73 L53 24"/>
+  <path class="warn" d="M53 24 L61 45 L67 62 H80"/>
+  <circle class="crit" cx="80" cy="62" r="6.0"/>
+</svg>

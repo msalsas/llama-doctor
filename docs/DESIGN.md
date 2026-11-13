@@ -51,7 +51,7 @@ the dashboard works offline with no path lookups outside the package.
 
 ```
 LlamaClient.snapshot()
-  GET /metrics   -> promparse -> MetricsSnapshot.from_samples
+  GET /metrics[?model=NAME] -> promparse -> MetricsSnapshot.from_samples
   GET /props     -> json      -> PropsSnapshot.from_payload   (whitelist)
   GET /v1/models -> json      -> ModelsMeta.from_payload      (whitelist)
   GET /slots     -> json      -> slots.py -> SlotsSnapshot    (optional, skipped by --no-slots)
@@ -67,6 +67,35 @@ LlamaClient.snapshot()
 `/slots` is read by default, only for token counts (live context use and a KV
 estimate); prompt text and ids are never kept. Its failure is not an endpoint
 error: it sets `ServerSnapshot.slots_error` and leaves the rest untouched.
+
+In router mode `--model NAME` sets `LlamaClient.model`. Only `/metrics`
+carries it, as `?model=` with the name percent-encoded. Error keys stay
+`/metrics`. The base URL still may not contain `?`.
+
+The probe measures completions through route discovery: `LlamaClient.complete`
+POSTs to `/v1/completions`, `/v1/chat/completions` and `/completion` in that
+order and caches the first route whose `timings` parse, per client instance.
+Statuses 400/404/405/422/501 and body-shape failures (`invalid JSON`,
+`no timings in response`, `unusable timings`) fall through to the next route;
+timeouts, connection errors, 401/403/429 and 5xx stop discovery and surface
+the recorded attempts. Once a route is cached, later calls use it only and a
+failure re-raises the plain `FetchError`. The OpenAI-style routes carry the
+model id from `/v1/models` in the JSON body; `/completion` never does.
+`--probe` is refused with `--model` because `/completion` would need the
+model in the body.
+
+The probe runs inside one wall-time budget, `--probe-budget` (default 300 s), and
+never uses `--timeout`, which keeps its meaning for every other request. Each
+warm-up discovery attempt may take the budget divided evenly across the
+completion routes, so a warm-up through all of them still fits. The measured
+request gets whatever is left; under 1 s left skips it as `probe budget
+exhausted`. The warm-up's server-reported decode rate
+picks the prompt: if 1400 words at 1.25 tokens per word plus `n_predict` would
+fit in the remaining time even with prefill no faster than decode, the full
+prompt runs; otherwise 1000 words and at most 16 generated tokens, which still
+yields the 1000 prompt tokens `reliable` needs. Each slice bounds one socket
+operation, so a slow server can overrun the budget by seconds; the budget bounds
+what llama-doctor waits for, not what the server takes.
 
 Raw JSON payloads exist only as local variables inside `client.py`. No public
 function returns them, stores them, or puts them in an exception.

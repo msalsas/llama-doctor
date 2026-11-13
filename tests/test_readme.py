@@ -113,6 +113,11 @@ class TestReadme(unittest.TestCase):
         self.assertIn("`--weights-gib N`", diagnose)
         self.assertIn("`--weights-gib N`", serve.split("\n## ", 1)[0])
 
+    def test_diagnose_documents_probe_budget(self):
+        reference = self.readme.split("`llama-doctor diagnose URL`", 1)[1]
+        diagnose, _serve = reference.split("`llama-doctor serve URL`", 1)
+        self.assertIn("`--probe-budget SEC`", diagnose)
+
     def test_linked_repo_paths_exist(self):
         paths = re.findall(r"\]\(((?:docs|src)/[^)#]+|LICENSE)\)", self.readme)
         self.assertTrue(paths)

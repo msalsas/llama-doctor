@@ -103,6 +103,13 @@ class TestServer(unittest.TestCase):
         for path in ("/static/../server.py", "/static/other.js", "/etc/passwd"):
             self.assertEqual(self._request("GET", path)[0], 404)
 
+    def test_favicon_served_as_svg(self):
+        Path(self.temp_dir.name, "favicon.svg").write_text("<svg/>", encoding="utf-8")
+        status, headers, body = self._request("GET", "/static/favicon.svg")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "image/svg+xml")
+        self.assertEqual(body, b"<svg/>")
+
     def test_missing_static_file_404(self):
         Path(self.temp_dir.name, "app.css").unlink()
 
