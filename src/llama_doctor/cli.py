@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import sys
 from collections.abc import Sequence
@@ -9,7 +10,13 @@ from .analysis import diagnose
 from .analysis.base import DiagnosisContext, HostHints
 from .client import DEFAULT_TIMEOUT, LlamaClient
 from .models import ProbeSkip
-from .probe import describe_skip, run_probe_detailed
+from .probe import (
+    PROBE_BUDGET_S,
+    MeasurePlan,
+    budget_hint,
+    describe_skip,
+    run_probe_detailed,
+)
 from .redact import Secret
 from .render.jsondoc import diagnosis_document
 from .render.terminal import render_report, use_color
@@ -28,6 +35,21 @@ def _positive_float(value: str) -> float:
     if not number > 0:
         raise argparse.ArgumentTypeError("must be > 0")
     return number
+
+
+def _positive_finite_float(value: str) -> float:
+    number = float(value)
+    if not (math.isfinite(number) and number > 0):
+        raise argparse.ArgumentTypeError("must be a finite number > 0")
+    return number
+
+
+def _print_plan(plan: MeasurePlan) -> None:
+    print(
+        f"probe: measured prompt {plan.words} words, {plan.n_predict} tokens, "
+        f"timeout {plan.timeout:.0f} s",
+        file=sys.stderr,
+    )
 
 
 def _positive_int(value: str) -> int:
@@ -53,6 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
     diagnose_parser.add_argument("--model", metavar="NAME")
     diagnose_parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     diagnose_parser.add_argument("--probe", action="store_true")
+    diagnose_parser.add_argument(
+        "--probe-budget", type=_positive_finite_float, default=PROBE_BUDGET_S, metavar="SEC"
+    )
     diagnose_parser.add_argument("--vram-gib", type=float, metavar="N")
     diagnose_parser.add_argument("--ram-gib", type=float, metavar="N")
     diagnose_parser.add_argument("--weights-gib", type=float, metavar="N")
@@ -124,13 +149,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     snapshot = client.snapshot(include_slots=not args.no_slots)
     probe = None
     if args.probe and snapshot.alive:
-        print("probe: warm-up plus one synthetic prompt (prefix cache disabled)", file=sys.stderr)
+        print(
+            f"probe: warm-up plus one synthetic prompt (prefix cache disabled), "
+            f"budget {args.probe_budget:g} s",
+            file=sys.stderr,
+        )
         model_id = snapshot.models.model_id if snapshot.models is not None else None
-        outcome = run_probe_detailed(client, model_id=model_id)
+        outcome = run_probe_detailed(
+            client, model_id=model_id, budget_s=args.probe_budget, on_plan=_print_plan
+        )
         if client.completion_route is not None:
             print(f"probe: route {client.completion_route}", file=sys.stderr)
         if isinstance(outcome, ProbeSkip):
             print(describe_skip(outcome), file=sys.stderr)
+            hint = budget_hint(outcome, args.probe_budget)
+            if hint is not None:
+                print(hint, file=sys.stderr)
         else:
             probe = outcome
     context = DiagnosisContext(

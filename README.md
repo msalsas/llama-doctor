@@ -117,12 +117,13 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | --- | --- |
 | `--json` | Print findings as JSON instead of text. |
 | `--probe` | Send a warm-up and one synthetic completion request to measure real latency. |
+| `--probe-budget SEC` | Total time allowed for `--probe` (default `300`). The warm-up divides it evenly across the completion routes tried and the measured prompt gets the rest; slow servers get a smaller prompt that is still reliable. |
 | `--vram-gib N` | GPU memory available, used by the memory estimate. |
 | `--ram-gib N` | System RAM available for offloaded weights. |
 | `--weights-gib N` | Model weight size in GiB, used only when the server does not report it; the memory finding then shows `weights_source: hint`. |
 | `--api-key-env VAR` | Read the server's API key from environment variable `VAR`. |
 | `--model NAME` | For a llama-server in router mode (several models behind one URL): read `/metrics` for model `NAME` by sending `GET /metrics?model=NAME`. `/props`, `/v1/models` and `/slots` are read as usual. Cannot be combined with `--probe` (exit 3). |
-| `--timeout SEC` | HTTP timeout per request. |
+| `--timeout SEC` | HTTP timeout per request. `--probe` requests use `--probe-budget` instead. |
 | `--no-color` | Disable ANSI colour in text output. |
 | `--no-slots` | Do not read `GET /slots` (live context and the KV estimate in findings). Without this flag it is read with the same auth as `/metrics`; any failure just leaves those values out. Only token counts are used; prompt text and ids are never kept. |
 

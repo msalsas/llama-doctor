@@ -421,5 +421,136 @@ class TestCli(unittest.TestCase):
         )
 
 
+class TestProbeBudgetCli(unittest.TestCase):
+    def _run(self, args: list[str]) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            result = main(args)
+        return result, stdout.getvalue(), stderr.getvalue()
+
+    def _probe_routes(self, server: FakeLlamaServer, delay: float = 0.0) -> None:
+        timings = json.dumps({
+            "timings": {
+                "prompt_n": 1200,
+                "prompt_ms": 1500.0,
+                "predicted_n": 64,
+                "predicted_ms": 3200.0,
+            }
+        })
+        for route in ("/v1/completions", "/v1/chat/completions", "/completion"):
+            server.set_route(route, 200, timings, "application/json", delay=delay)
+
+    def test_probe_start_line_includes_budget(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            self._probe_routes(server)
+            result, _, stderr = self._run(["diagnose", server.url, "--probe"])
+
+        self.assertEqual(result, 1)
+        self.assertIn(
+            "probe: warm-up plus one synthetic prompt (prefix cache disabled), "
+            "budget 300 s\n",
+            stderr,
+        )
+        self.assertRegex(stderr, r"probe: measured prompt 1400 words, 64 tokens, timeout \d+ s\n")
+        self.assertNotIn("retry with a larger --probe-budget", stderr)
+
+    def test_custom_budget_in_start_line(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            self._probe_routes(server)
+            _, _, stderr = self._run(
+                ["diagnose", server.url, "--probe", "--probe-budget", "45.5"]
+            )
+
+        self.assertIn("budget 45.5 s\n", stderr)
+
+    def test_invalid_probe_budget_rejected(self):
+        for value in ("0", "-3", "inf", "nan", "abc"):
+            with self.subTest(value=value), FakeLlamaServer() as server:
+                _set_routes(server)
+                self._probe_routes(server)
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                    main(["diagnose", server.url, "--probe", "--probe-budget", value])
+
+                self.assertEqual(raised.exception.code, EXIT_TOOL_ERROR)
+                self.assertIn("--probe-budget", stderr.getvalue())
+
+    def test_probe_ignores_client_timeout(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            self._probe_routes(server, delay=0.3)
+            result, stdout, _ = self._run(
+                ["diagnose", server.url, "--probe", "--json", "--timeout", "0.1"]
+            )
+
+        document = json.loads(stdout)
+        self.assertEqual(result, 1)
+        self.assertEqual(document["probe"]["prefill_tps"], 800.0)
+
+    def test_timeout_skip_prints_budget_hint(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            self._probe_routes(server)
+            timings = json.dumps({
+                "timings": {
+                    "prompt_n": 1200,
+                    "prompt_ms": 1500.0,
+                    "predicted_n": 64,
+                    "predicted_ms": 3200.0,
+                }
+            })
+            server.set_route(
+                "/v1/completions", 200, timings, "application/json", delay=1.0
+            )
+            _, _, stderr = self._run(
+                ["diagnose", server.url, "--probe", "--probe-budget", "1.5"]
+            )
+
+        self.assertIn(
+            "probe: no usable completion route (/v1/completions: timed out), "
+            "using lifetime counters\n"
+            "probe: the server did not answer within the 1.5 s probe budget; "
+            "retry with a larger --probe-budget\n",
+            stderr,
+        )
+
+    def test_no_hint_when_all_routes_404(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            _, _, stderr = self._run(["diagnose", server.url, "--probe"])
+
+        self.assertNotIn("--probe-budget", stderr)
+
+    def test_probe_budget_without_probe_changes_nothing(self):
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            result_without, _, _ = self._run(["diagnose", server.url])
+            requests_without = list(server.requests)
+        with FakeLlamaServer() as server:
+            _set_routes(server)
+            result_with, _, _ = self._run(["diagnose", server.url, "--probe-budget", "10"])
+            requests_with = list(server.requests)
+
+        self.assertEqual(result_with, result_without)
+        self.assertEqual(
+            [request[1] for request in requests_with],
+            [request[1] for request in requests_without],
+        )
+        self.assertFalse(
+            any(request[1] in ("/v1/completions", "/v1/chat/completions", "/completion")
+                for request in requests_with)
+        )
+
+    def test_serve_rejects_probe_budget(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            main(["serve", "http://server", "--probe-budget", "10"])
+
+        self.assertEqual(raised.exception.code, EXIT_TOOL_ERROR)
+
+
 if __name__ == "__main__":
     unittest.main()

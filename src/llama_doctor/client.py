@@ -1,5 +1,6 @@
 import http.client
 import json
+import math
 import time
 import urllib.error
 import urllib.parse
@@ -164,15 +165,19 @@ class LlamaClient:
             headers["Authorization"] = "Bearer " + self._api_key.reveal()
         return headers
 
-    def _fetch_bytes(self, path: str, data: bytes | None = None, query: str = "") -> bytes:
+    def _fetch_bytes(
+        self, path: str, data: bytes | None = None, query: str = "",
+        timeout: float | None = None,
+    ) -> bytes:
         headers = self._headers()
         if data is not None:
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
             self._base_url + path + query, data=data, headers=headers
         )
+        effective = self._timeout if timeout is None else timeout
         try:
-            with self._opener.open(request, timeout=self._timeout) as response:
+            with self._opener.open(request, timeout=effective) as response:
                 body = response.read(MAX_BODY_BYTES + 1)
         except urllib.error.HTTPError as exc:
             exc.close()
@@ -195,9 +200,11 @@ class LlamaClient:
             raise FetchError(path, "response too large")
         return body
 
-    def _fetch_json(self, path: str, data: bytes | None = None) -> Any:
+    def _fetch_json(
+        self, path: str, data: bytes | None = None, timeout: float | None = None
+    ) -> Any:
         try:
-            return json.loads(self._fetch_bytes(path, data))
+            return json.loads(self._fetch_bytes(path, data, timeout=timeout))
         except ValueError:
             raise FetchError(path, "invalid JSON") from None
         except RecursionError:
@@ -264,14 +271,17 @@ class LlamaClient:
         )
 
     def complete(
-        self, prompt: str, n_predict: int, *, model_id: str | None = None
+        self, prompt: str, n_predict: int, *, model_id: str | None = None,
+        timeout: float | None = None,
     ) -> CompletionTimings:
+        if timeout is not None and not (math.isfinite(timeout) and timeout > 0):
+            raise ValueError("timeout must be a finite number > 0")
         if self._completion_route is not None:
-            return self._complete_on(self._completion_route, prompt, n_predict, model_id)
+            return self._complete_on(self._completion_route, prompt, n_predict, model_id, timeout)
         attempts: list[EndpointError] = []
         for route in COMPLETION_ROUTES:
             try:
-                timings = self._complete_on(route, prompt, n_predict, model_id)
+                timings = self._complete_on(route, prompt, n_predict, model_id, timeout)
             except FetchError as exc:
                 attempts.append(exc.to_endpoint_error())
                 if not _falls_through(exc):
@@ -282,8 +292,9 @@ class LlamaClient:
         raise ProbeRouteError(tuple(attempts))
 
     def _complete_on(
-        self, route: str, prompt: str, n_predict: int, model_id: str | None
+        self, route: str, prompt: str, n_predict: int, model_id: str | None,
+        timeout: float | None = None,
     ) -> CompletionTimings:
         payload = _completion_body(route, prompt, n_predict, model_id)
-        decoded = self._fetch_json(route, data=json.dumps(payload).encode("utf-8"))
+        decoded = self._fetch_json(route, data=json.dumps(payload).encode("utf-8"), timeout=timeout)
         return _parse_timings(route, decoded)
