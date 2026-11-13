@@ -19,7 +19,7 @@ If you want strict origin-only behaviour instead, it's a one-line change: reject
 2. `tests/test_client.py`: new tests in `TestNormalizeBaseUrl` and `TestLlamaClient`.
 3. `tests/test_agentcheck_cli.py`: three new tests.
 4. `docs/contracts/T1-core.md`: the `normalize_base_url` bullet (lines 157–159) and the test description (lines 265–267).
-5. `docs/contracts/T6-agentcheck.md`: §5, §8 and §10.
+5. `docs/contracts/T8-agentcheck.md`: §5, §8 and §10.
 6. `README.md`: the Quick start paragraph (line 41) and the agentcheck section (line 112).
 
 No other code changes. `LlamaClient`, `CHAT_PATH`, `family.py` and the report code keep joining `base_url + path`. The `target:` line prints `client.base_url`, so it shows the trimmed URL without any further change.
@@ -144,15 +144,15 @@ Finish with `python3 -m unittest discover`, which must stay green.
 
 > `http://h:8888/v1` and `http://h:8888/v1/chat/completions` give `http://h:8888`; `http://h/v1/models`, `http://h/v2` and `http://h/v1/v1` raise ValueError
 
-**`docs/contracts/T6-agentcheck.md` §5.** Add this paragraph after the parser block:
+**`docs/contracts/T8-agentcheck.md` §5.** Add this paragraph after the parser block:
 
 > The URL argument goes through `normalize_base_url` (T1). `http://host:8888/v1` and `http://host:8888/v1/chat/completions` both target `http://host:8888`, and the report's `target:` line prints that trimmed URL. Before this, the client sent `/v1/v1/chat/completions` (HTTP 405 on Unsloth Studio).
 
-**`docs/contracts/T6-agentcheck.md` §10.** Add this entry:
+**`docs/contracts/T8-agentcheck.md` §10.** Add this entry:
 
 > **URL prefixes are kept, not rejected.** Only a version or API-endpoint last segment fails, so reverse-proxy subpaths keep working.
 
-**`docs/contracts/T6-agentcheck.md` §8 and README line 112.** Append the same sentence to the agentcheck paragraph in both places:
+**`docs/contracts/T8-agentcheck.md` §8 and README line 112.** Append the same sentence to the agentcheck paragraph in both places:
 
 > URL is the server origin; an OpenAI-style base ending in `/v1`, or a full `/v1/chat/completions` URL, also works.
 

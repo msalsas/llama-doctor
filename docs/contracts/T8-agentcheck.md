@@ -1039,7 +1039,7 @@ CLI reference block:
 8. [ ] Write `checks.py`: `split_think`, `has_tool_markup`, `classify`, `evaluate_case`, the verdicts, `is_fatal`, both runners and `AgentCheckResult`. Write tests 24–37 and the exit matrix.
 9. [ ] Write `report.py` and tests 43–45.
 10. [ ] Write `__init__.run_agentcheck`, then wire `cli.py` (§5) and write tests 46–52.
-11. [ ] Update the README (§8) and add the `test_readme` flag test. Add a short agentcheck paragraph to `docs/DESIGN.md`, and save this design as `docs/contracts/T6-agentcheck.md`.
+11. [ ] Update the README (§8) and add the `test_readme` flag test. Add a short agentcheck paragraph to `docs/DESIGN.md`, and save this design as `docs/contracts/T8-agentcheck.md`.
 12. [ ] Run `python3 -m unittest discover -v` and `ruff check src tests`. Run `grep -rn "#" src/llama_doctor/agentcheck`; the only hits should be inside string literals.
 13. [ ] Do one manual run against a real llama.cpp server and one against a Strata server. Confirm that `usage.prompt_tokens` falls in the 8–10k range, and adjust the filler constants if it does not.
 
