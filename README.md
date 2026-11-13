@@ -117,7 +117,7 @@ The findings and recommendations panels re-run every analyzer on each poll, so a
 | --- | --- |
 | `--json` | Print findings as JSON instead of text. |
 | `--probe` | Send a warm-up and one synthetic completion request to measure real latency. |
-| `--probe-budget SEC` | Total time allowed for `--probe` (default `300`). The warm-up may use a third of it per route tried and the measured prompt gets the rest; slow servers get a smaller prompt that is still reliable. |
+| `--probe-budget SEC` | Total time allowed for `--probe` (default `300`). The warm-up divides it evenly across the completion routes tried and the measured prompt gets the rest; slow servers get a smaller prompt that is still reliable. |
 | `--vram-gib N` | GPU memory available, used by the memory estimate. |
 | `--ram-gib N` | System RAM available for offloaded weights. |
 | `--weights-gib N` | Model weight size in GiB, used only when the server does not report it; the memory finding then shows `weights_source: hint`. |

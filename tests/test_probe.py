@@ -480,8 +480,7 @@ class TestBudgetHint(unittest.TestCase):
     def test_exhausted_skip_string(self):
         self.assertEqual(
             describe_skip(ProbeSkip("measure", PROBE_BUDGET_EXHAUSTED, "/completion")),
-            "probe: measured prompt failed on /completion: probe budget exhausted, "
-            "using lifetime counters",
+            "probe: budget exhausted before the measured prompt, using lifetime counters",
         )
 
 

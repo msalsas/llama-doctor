@@ -136,6 +136,8 @@ def run_probe(
 
 def describe_skip(skip: ProbeSkip) -> str:
     if skip.stage == "measure":
+        if skip.reason == PROBE_BUDGET_EXHAUSTED:
+            return "probe: budget exhausted before the measured prompt, using lifetime counters"
         return f"probe: measured prompt failed on {skip.route}: {skip.reason}, using lifetime counters"
     if skip.stage == "timings":
         return f"probe: unusable timings from {skip.route}, using lifetime counters"

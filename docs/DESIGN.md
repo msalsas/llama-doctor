@@ -86,15 +86,16 @@ model in the body.
 
 The probe runs inside one wall-time budget, `--probe-budget` (default 300 s), and
 never uses `--timeout`, which keeps its meaning for every other request. Each
-warm-up discovery attempt may take budget / 3, so a warm-up through all three
-routes still fits. The measured request gets whatever is left; under 1 s left
-skips it as `probe budget exhausted`. The warm-up's server-reported decode rate
+warm-up discovery attempt may take the budget divided evenly across the
+completion routes, so a warm-up through all of them still fits. The measured
+request gets whatever is left; under 1 s left skips it as `probe budget
+exhausted`. The warm-up's server-reported decode rate
 picks the prompt: if 1400 words at 1.25 tokens per word plus `n_predict` would
 fit in the remaining time even with prefill no faster than decode, the full
 prompt runs; otherwise 1000 words and at most 16 generated tokens, which still
-yields the 1000 prompt tokens `reliable` needs. The probe therefore ends within
-the budget, unless a server trickles bytes slowly enough to keep resetting the
-socket timeout.
+yields the 1000 prompt tokens `reliable` needs. Each slice bounds one socket
+operation, so a slow server can overrun the budget by seconds; the budget bounds
+what llama-doctor waits for, not what the server takes.
 
 Raw JSON payloads exist only as local variables inside `client.py`. No public
 function returns them, stores them, or puts them in an exception.
