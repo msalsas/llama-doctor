@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+import time
 from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -47,7 +48,7 @@ def make_context(
 
 class FakeLlamaServer:
     def __init__(self) -> None:
-        self._routes: dict[str, tuple[int, bytes, str, dict[str, str]]] = {}
+        self._routes: dict[str, tuple[int, bytes, str, dict[str, str], float]] = {}
         self.requests: list[tuple[str, str, dict[str, str], bytes]] = []
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler_class())
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -65,10 +66,11 @@ class FakeLlamaServer:
         body: str | bytes,
         content_type: str = "text/plain",
         headers: dict[str, str] | None = None,
+        delay: float = 0.0,
     ) -> None:
         if isinstance(body, str):
             body = body.encode("utf-8")
-        self._routes[path] = (status, body, content_type, dict(headers or {}))
+        self._routes[path] = (status, body, content_type, dict(headers or {}), delay)
 
     def __enter__(self) -> "FakeLlamaServer":  # noqa: PYI034
         return self
@@ -90,16 +92,21 @@ class FakeLlamaServer:
                 outer.requests.append((self.command, self.path, dict(self.headers), body))
                 route = outer._routes.get(self.path)
                 if route is None:
-                    status, payload, content_type, extra = 404, b"", "text/plain", {}
+                    status, payload, content_type, extra, delay = 404, b"", "text/plain", {}, 0.0
                 else:
-                    status, payload, content_type, extra = route
-                self.send_response(status)
-                self.send_header("Content-Type", content_type)
-                self.send_header("Content-Length", str(len(payload)))
-                for name, value in extra.items():
-                    self.send_header(name, value)
-                self.end_headers()
-                self.wfile.write(payload)
+                    status, payload, content_type, extra, delay = route
+                if delay:
+                    time.sleep(delay)
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", content_type)
+                    self.send_header("Content-Length", str(len(payload)))
+                    for name, value in extra.items():
+                        self.send_header(name, value)
+                    self.end_headers()
+                    self.wfile.write(payload)
+                except OSError:
+                    pass
 
             do_GET = _dispatch
             do_POST = _dispatch

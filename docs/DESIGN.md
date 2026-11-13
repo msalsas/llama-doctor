@@ -84,6 +84,18 @@ model id from `/v1/models` in the JSON body; `/completion` never does.
 `--probe` is refused with `--model` because `/completion` would need the
 model in the body.
 
+The probe runs inside one wall-time budget, `--probe-budget` (default 300 s), and
+never uses `--timeout`, which keeps its meaning for every other request. Each
+warm-up discovery attempt may take budget / 3, so a warm-up through all three
+routes still fits. The measured request gets whatever is left; under 1 s left
+skips it as `probe budget exhausted`. The warm-up's server-reported decode rate
+picks the prompt: if 1400 words at 1.25 tokens per word plus `n_predict` would
+fit in the remaining time even with prefill no faster than decode, the full
+prompt runs; otherwise 1000 words and at most 16 generated tokens, which still
+yields the 1000 prompt tokens `reliable` needs. The probe therefore ends within
+the budget, unless a server trickles bytes slowly enough to keep resetting the
+socket timeout.
+
 Raw JSON payloads exist only as local variables inside `client.py`. No public
 function returns them, stores them, or puts them in an exception.
 

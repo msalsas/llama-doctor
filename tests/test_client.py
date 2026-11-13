@@ -1,7 +1,9 @@
 import json
+import math
 import socket
 import threading
 import unittest
+from unittest.mock import patch
 
 from llama_doctor.client import (
     FetchError,
@@ -408,6 +410,78 @@ def _timings_body(**overrides: object) -> str:
     }
     timings.update(overrides)
     return json.dumps({"timings": timings})
+
+
+class TestCompleteTimeout(unittest.TestCase):
+    def test_explicit_timeout_is_passed_to_every_attempt(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/v1/completions", 200, _timings_body(), "application/json")
+            client = LlamaClient(server.url)
+            with patch.object(client._opener, "open", wraps=client._opener.open) as open_:
+                client.complete("x", 1, timeout=42.0)
+                client.complete("x", 1, timeout=7.0)
+
+        self.assertEqual(
+            [call.kwargs["timeout"] for call in open_.call_args_list], [42.0, 7.0]
+        )
+
+    def test_default_timeout_when_not_given(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/v1/completions", 200, _timings_body(), "application/json")
+            client = LlamaClient(server.url, timeout=5.0)
+            with patch.object(client._opener, "open", wraps=client._opener.open) as open_:
+                client.complete("x", 1)
+
+        self.assertEqual(open_.call_args.kwargs["timeout"], 5.0)
+
+    def test_timeout_does_not_carry_over_to_later_calls(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/metrics", 200, load_fixture("metrics_minimal.txt"))
+            server.set_route("/v1/completions", 200, _timings_body(), "application/json")
+            client = LlamaClient(server.url, timeout=5.0)
+            with patch.object(client._opener, "open", wraps=client._opener.open) as open_:
+                client.complete("x", 1, timeout=42.0)
+                client.fetch_metrics()
+
+        self.assertEqual(
+            [call.kwargs["timeout"] for call in open_.call_args_list], [42.0, 5.0]
+        )
+
+    def test_invalid_timeout_rejected_before_any_request(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/v1/completions", 200, _timings_body(), "application/json")
+            client = LlamaClient(server.url)
+            for timeout in (0, -1, math.inf, math.nan):
+                with self.subTest(timeout=timeout), self.assertRaises(ValueError):
+                    client.complete("x", 1, timeout=timeout)
+
+            self.assertEqual(server.requests, [])
+
+    def test_discovery_attempts_receive_the_timeout(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/v1/completions", 404, "")
+            server.set_route("/completion", 200, _timings_body(), "application/json")
+            client = LlamaClient(server.url)
+            with patch.object(client._opener, "open", wraps=client._opener.open) as open_:
+                client.complete("x", 1, timeout=9.0)
+
+        self.assertGreaterEqual(open_.call_count, 2)
+        self.assertTrue(
+            all(call.kwargs["timeout"] == 9.0 for call in open_.call_args_list)
+        )
+        self.assertEqual(
+            [req[1] for req in server.requests],
+            ["/v1/completions", "/v1/chat/completions", "/completion"],
+        )
+
+    def test_default_timeout_still_applies_to_gets(self):
+        with FakeLlamaServer() as server:
+            server.set_route("/metrics", 200, load_fixture("metrics_minimal.txt"), delay=0.5)
+            client = LlamaClient(server.url, timeout=0.1)
+            with self.assertRaises(FetchError) as ctx:
+                client.fetch_metrics()
+
+        self.assertEqual(ctx.exception.reason, "timed out")
 
 
 class TestCompletionRouteDiscovery(unittest.TestCase):
