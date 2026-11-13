@@ -8,7 +8,8 @@ from . import __version__
 from .analysis import diagnose
 from .analysis.base import DiagnosisContext, HostHints
 from .client import DEFAULT_TIMEOUT, LlamaClient
-from .probe import run_probe
+from .models import ProbeSkip
+from .probe import describe_skip, run_probe_detailed
 from .redact import Secret
 from .render.jsondoc import diagnosis_document
 from .render.terminal import render_report, use_color
@@ -124,9 +125,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     probe = None
     if args.probe and snapshot.alive:
         print("probe: warm-up plus one synthetic prompt (prefix cache disabled)", file=sys.stderr)
-        probe = run_probe(client)
-        if probe is None:
-            print("probe: failed, using lifetime counters", file=sys.stderr)
+        model_id = snapshot.models.model_id if snapshot.models is not None else None
+        outcome = run_probe_detailed(client, model_id=model_id)
+        if client.completion_route is not None:
+            print(f"probe: route {client.completion_route}", file=sys.stderr)
+        if isinstance(outcome, ProbeSkip):
+            print(describe_skip(outcome), file=sys.stderr)
+        else:
+            probe = outcome
     context = DiagnosisContext(
         snapshot,
         probe,
