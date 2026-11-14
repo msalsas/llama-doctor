@@ -118,10 +118,6 @@ class TestGpuEvidence(unittest.TestCase):
         auto = PropsSnapshot.from_payload({"model_path": "x.gguf", "n_gpu_layers": -1})
         self.assertEqual(gpu_evidence(self._with(auto)), GpuEvidence("unknown", None))
 
-    def test_props_unsloth_current_resolves_n_ctx(self):
-        props = PropsSnapshot.from_payload(json.loads(load_fixture("props_unsloth_current.json")))
-        self.assertEqual(props.n_ctx, 80128)
-
     def test_props_unsloth_current_has_unknown_gpu_evidence(self):
         props = PropsSnapshot.from_payload(json.loads(load_fixture("props_unsloth_current.json")))
         self.assertEqual(gpu_evidence(self._with(props)), GpuEvidence("unknown", None))

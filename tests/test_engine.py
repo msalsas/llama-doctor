@@ -177,6 +177,7 @@ class TestGpuGuard(unittest.TestCase):
         report = diagnose(make_context(props="props_unsloth_minimal.json", hints=HostHints(vram_gib=0.0)))
         finding = report.by_code("prefill.moe_cpu_experts")
         self.assertEqual([item.flag for item in finding.recommendations], [None, "--draft-max"])
+        self.assertEqual([item.impact for item in finding.recommendations], [3, 2])
         self.assertEqual(finding.evidence["gpu_status"], "cpu")
         self.assertEqual(finding.evidence["gpu_source"], "hint.vram_gib")
         self.assertEqual(finding.evidence["gpu_recs_withheld"], 2)
@@ -188,6 +189,7 @@ class TestGpuGuard(unittest.TestCase):
         finding = report.by_code("prefill.moe_cpu_experts")
         self.assertEqual([item.flag for item in finding.recommendations],
                          [None, "--n-cpu-moe", "--draft-max", "-c"])
+        self.assertEqual([item.impact for item in finding.recommendations], [3, 3, 2, 1])
         self.assertEqual(finding.evidence["gpu_status"], "gpu")
         self.assertEqual(finding.evidence["gpu_source"], "hint.vram_gib")
         self.assertEqual(finding.evidence["gpu_recs_withheld"], 0)
@@ -233,14 +235,19 @@ class TestGpuGuard(unittest.TestCase):
         self.assertIn("Reduce context to free VRAM for experts.", actions)
 
     def test_guard_leaves_neutral_findings_untouched(self):
-        report = diagnose(make_context(props="props_unsloth_minimal.json"))
-        low = report.by_code("prefix_cache.low_hit_ratio")
-        self.assertEqual(set(low.evidence), {"hit_ratio"})
-        self.assertIs(guard_gpu(low, GpuEvidence("unknown", None)), low)
-        oversized = diagnose(make_context()).by_code("context.oversized")
+        report = diagnose(make_context(props="props_unsloth_current.json"))
+        guarded = report.by_code("prefill.cpu_bound")
+        self.assertEqual([item.flag for item in guarded.recommendations], [None])
+        self.assertEqual(guarded.evidence["gpu_status"], "unknown")
+        self.assertIsNone(guarded.evidence["gpu_source"])
+        self.assertEqual(guarded.evidence["gpu_recs_withheld"], 2)
+        oversized = report.by_code("context.oversized")
         self.assertEqual(set(oversized.evidence),
                          {"used_ratio", "n_tokens_max", "n_ctx", "suggested_ctx"})
         self.assertIs(guard_gpu(oversized, GpuEvidence("unknown", None)), oversized)
+        low = report.by_code("prefix_cache.low_hit_ratio")
+        self.assertEqual(set(low.evidence), {"hit_ratio"})
+        self.assertIs(guard_gpu(low, GpuEvidence("unknown", None)), low)
 
     def test_sort_uses_guarded_impact(self):
         specs = (
