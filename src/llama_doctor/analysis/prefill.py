@@ -53,20 +53,24 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
     if is_cpu_bound(ctx):
         if is_moe:
             recommendations = (
-                Recommendation("Use a smaller quantization.", "It can keep more experts in VRAM.", Impact.HIGH),
+                Recommendation("Use a smaller quantization.",
+                               "Fewer bits per weight move fewer bytes per token on any device.",
+                               Impact.HIGH),
                 _moe_experts(Impact.HIGH),
                 Recommendation("Use MTP or speculative drafting at 2.", "Short drafts reduce CPU expert work.",
                                Impact.MEDIUM, "--draft-max"),
                 Recommendation("Reduce context to free VRAM for experts.", "More VRAM improves offload.",
-                               Impact.LOW, "-c"),
+                               Impact.LOW, "-c", gpu_only=True),
             )
             return [Finding("prefill", "prefill.moe_cpu_experts", Severity.CRITICAL,
                             "MoE experts are CPU-bound", "Slow prefill indicates CPU-resident experts.",
                             evidence, recommendations)]
         recommendations = (
             Recommendation("Offload more layers to the GPU.", "GPU offload improves prefill.", Impact.HIGH, "-ngl"),
-            Recommendation("Use a smaller quantization.", "It can increase GPU offload.", Impact.HIGH),
-            Recommendation("Reduce context to free VRAM.", "More VRAM can enable offload.", Impact.LOW, "-c"),
+            Recommendation("Use a smaller quantization.",
+                           "Fewer bits per weight move fewer bytes per token on any device.", Impact.HIGH),
+            Recommendation("Reduce context to free VRAM.", "More VRAM can enable offload.", Impact.LOW, "-c",
+                           gpu_only=True),
         )
         return [Finding("prefill", "prefill.cpu_bound", Severity.WARN, "Prefill is CPU-bound",
                         "Prefill throughput indicates CPU work.", evidence, recommendations)]

@@ -1,10 +1,11 @@
 import math
+import re
 import unittest
 from dataclasses import replace
 from pathlib import Path
 
 from llama_doctor.analysis import BUILTIN_ANALYZERS
-from llama_doctor.analysis.base import DiagnosisContext, HostHints, Severity
+from llama_doctor.analysis.base import DiagnosisContext, HostHints, Severity, requires_gpu
 from llama_doctor.analysis.signals import is_cpu_bound
 from llama_doctor.models import EndpointError, ProbeResult, PropsSnapshot, ServerSnapshot
 
@@ -349,6 +350,37 @@ class TestAnalyzers(unittest.TestCase):
         finding = findings(replace(make_context(), hints=HostHints(8, 4)), "memory")[0]
         self.assert_finding(finding, "memory.exceeds_total", Severity.CRITICAL, {"weights_source": "server"})
         self.assertEqual(finding.recommendations[0].impact, 3)
+
+    def test_device_neutral_rationales(self):
+        neutral = "Fewer bits per weight move fewer bytes per token on any device."
+        finding = findings(make_context(), "prefill")[0]
+        self.assertEqual(finding.recommendations[0].rationale, neutral)
+        props = PropsSnapshot.from_payload({"model_path": "Llama-3.1-8B-Q4_K_M.gguf"})
+        context = replace(make_context(), snapshot=replace(make_context().snapshot, props=props))
+        finding = findings(context, "prefill")[0]
+        self.assertEqual(finding.recommendations[1].rationale, neutral)
+        finding = findings(replace(make_context(), hints=HostHints(8, 4)), "memory")[0]
+        self.assertEqual(finding.recommendations[0].rationale, "Weights exceed the memory given.")
+
+    def test_gpu_text_implies_requires_gpu(self):
+        pattern = re.compile(r"(?i)\bGPU\b|\bVRAM\b|-ngl|--n-gpu-layers|--cpu-moe|--n-cpu-moe")
+        dense_props = PropsSnapshot.from_payload({"model_path": "Llama-3.1-8B-Q4_K_M.gguf"})
+        dense_context = replace(make_context(), snapshot=replace(make_context().snapshot, props=dense_props))
+        contexts = (
+            make_context(),
+            dense_context,
+            replace(make_context(props="props_unsloth_minimal.json"),
+                    probe=ProbeResult(500, 7, 1200, 4, 0)),
+            replace(make_context(), probe=ProbeResult(250, 20, 1200, 4, 0)),
+            replace(make_context(), hints=HostHints(8, 4)),
+        )
+        for context in contexts:
+            for spec in BUILTIN_ANALYZERS:
+                for finding in spec.func(context):
+                    for recommendation in finding.recommendations:
+                        text = f"{recommendation.action} {recommendation.rationale}"
+                        if pattern.search(text):
+                            self.assertTrue(requires_gpu(recommendation), f"{finding.code}: {text}")
 
     def test_memory_fits(self):
         self.assert_finding(findings(replace(make_context(), hints=HostHints(24)), "memory")[0],

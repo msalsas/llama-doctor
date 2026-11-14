@@ -27,6 +27,8 @@ class Impact(IntEnum):
 
 Evidence = Mapping[str, float | int | str | bool | None]
 
+GPU_FLAGS = frozenset({"-ngl", "--n-gpu-layers", "--n-cpu-moe", "--cpu-moe"})
+
 
 @dataclass(frozen=True)
 class Recommendation:
@@ -34,6 +36,11 @@ class Recommendation:
     rationale: str
     impact: Impact
     flag: str | None = None
+    gpu_only: bool = False
+
+
+def requires_gpu(recommendation: Recommendation) -> bool:
+    return recommendation.gpu_only or recommendation.flag in GPU_FLAGS
 
 
 @dataclass(frozen=True)

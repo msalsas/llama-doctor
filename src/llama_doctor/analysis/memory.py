@@ -34,7 +34,7 @@ def analyze(ctx: DiagnosisContext) -> list[Finding]:
     if ram is not None and weights > vram + ram:
         return [Finding("memory", "memory.exceeds_total", Severity.CRITICAL, "Weights exceed available memory",
                         detail, evidence, recommendations=(
-                            Recommendation("Use a smaller quantization.", "Weights exceed VRAM and RAM.",
+                            Recommendation("Use a smaller quantization.", "Weights exceed the memory given.",
                                            Impact.HIGH),))]
     if weights > vram:
         return [Finding("memory", "memory.partial_offload", Severity.INFO, "Weights require partial offload",
