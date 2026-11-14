@@ -83,9 +83,10 @@ class TestSignals(unittest.TestCase):
 
 
 class TestGpuEvidence(unittest.TestCase):
-    def _with(self, props: PropsSnapshot, hints: HostHints = HostHints()):
+    def _with(self, props: PropsSnapshot, hints: HostHints | None = None):
         context = make_context()
-        return replace(context, snapshot=replace(context.snapshot, props=props), hints=hints)
+        return replace(context, snapshot=replace(context.snapshot, props=props),
+                       hints=hints or HostHints())
 
     def test_gpu_evidence_from_props_layers(self):
         self.assertEqual(gpu_evidence(make_context()), GpuEvidence("gpu", "props.n_gpu_layers"))
