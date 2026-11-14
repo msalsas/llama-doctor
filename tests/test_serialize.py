@@ -2,7 +2,7 @@ import json
 import unittest
 
 from llama_doctor.analysis import diagnose
-from llama_doctor.analysis.base import Finding, Report, Severity
+from llama_doctor.analysis.base import Finding, HostHints, Report, Severity
 from llama_doctor.models import EndpointError, MetricsSnapshot
 from llama_doctor.serialize import (
     context_to_dict,
@@ -119,6 +119,26 @@ class TestSerialize(unittest.TestCase):
 
     def test_errors_to_dict(self):
         self.assertEqual(errors_to_dict({"x": EndpointError("x", 500, "failed")}), {"x": "failed"})
+
+    def test_recommendation_dict_keys_unchanged(self):
+        report = report_to_dict(diagnose(make_context()))
+        for finding in report["findings"]:
+            for recommendation in finding["recommendations"]:
+                self.assertEqual(set(recommendation), {"action", "rationale", "impact", "flag"})
+
+    def test_guarded_reports_roundtrip_json(self):
+        contexts = (
+            make_context(),
+            make_context(props="props_unsloth_minimal.json"),
+            make_context(props="props_unsloth_minimal.json", hints=HostHints(vram_gib=0.0)),
+        )
+        for context in contexts:
+            with self.subTest(hints=context.hints):
+                json.dumps(report_to_dict(diagnose(context)), allow_nan=False)
+        report = report_to_dict(diagnose(make_context(props="props_unsloth_minimal.json")))
+        finding = next(item for item in report["findings"]
+                       if item["code"] == "prefill.moe_cpu_experts")
+        self.assertIsNone(finding["evidence"]["gpu_source"])
 
 
 if __name__ == "__main__":

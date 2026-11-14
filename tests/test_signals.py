@@ -1,17 +1,21 @@
+import json
 import math
 import unittest
 from dataclasses import replace
 
+from llama_doctor.analysis.base import HostHints
 from llama_doctor.analysis.signals import (
+    GpuEvidence,
     context_used_ratio,
     decode_rate,
+    gpu_evidence,
     is_cpu_bound,
     mean_prompt_tokens,
     prefill_rate,
 )
-from llama_doctor.models import ProbeResult
+from llama_doctor.models import ProbeResult, PropsSnapshot
 
-from .support import make_context
+from .support import load_fixture, make_context
 
 
 class TestSignals(unittest.TestCase):
@@ -76,6 +80,48 @@ class TestSignals(unittest.TestCase):
             with self.subTest(decode_tps=value):
                 context = make_context(probe=ProbeResult(150.0, value, 1200, 10, 0.0))
                 self.assertFalse(is_cpu_bound(context))
+
+
+class TestGpuEvidence(unittest.TestCase):
+    def _with(self, props: PropsSnapshot, hints: HostHints | None = None):
+        context = make_context()
+        return replace(context, snapshot=replace(context.snapshot, props=props),
+                       hints=hints or HostHints())
+
+    def test_gpu_evidence_from_props_layers(self):
+        self.assertEqual(gpu_evidence(make_context()), GpuEvidence("gpu", "props.n_gpu_layers"))
+
+    def test_gpu_evidence_unknown_without_props_or_hint(self):
+        self.assertEqual(gpu_evidence(make_context(props="props_unsloth_minimal.json")),
+                         GpuEvidence("unknown", None))
+        self.assertEqual(gpu_evidence(make_context(props=None)), GpuEvidence("unknown", None))
+
+    def test_gpu_evidence_vram_hint(self):
+        context = make_context(props="props_unsloth_minimal.json")
+        self.assertEqual(gpu_evidence(replace(context, hints=HostHints(vram_gib=24.0))),
+                         GpuEvidence("gpu", "hint.vram_gib"))
+        self.assertEqual(gpu_evidence(replace(context, hints=HostHints(vram_gib=0.0))),
+                         GpuEvidence("cpu", "hint.vram_gib"))
+        for value in (-1.0, math.nan, math.inf):
+            with self.subTest(vram_gib=value):
+                self.assertEqual(gpu_evidence(replace(context, hints=HostHints(vram_gib=value))),
+                                 GpuEvidence("unknown", None))
+
+    def test_gpu_evidence_server_layers_beat_zero_hint(self):
+        context = make_context(hints=HostHints(vram_gib=0.0))
+        self.assertEqual(gpu_evidence(context), GpuEvidence("gpu", "props.n_gpu_layers"))
+
+    def test_gpu_evidence_zero_layers_and_hint(self):
+        zero = PropsSnapshot.from_payload({"model_path": "x.gguf", "n_gpu_layers": 0})
+        self.assertEqual(gpu_evidence(self._with(zero)), GpuEvidence("cpu", "props.n_gpu_layers"))
+        self.assertEqual(gpu_evidence(self._with(zero, HostHints(vram_gib=8.0))),
+                         GpuEvidence("gpu", "hint.vram_gib"))
+        auto = PropsSnapshot.from_payload({"model_path": "x.gguf", "n_gpu_layers": -1})
+        self.assertEqual(gpu_evidence(self._with(auto)), GpuEvidence("unknown", None))
+
+    def test_props_unsloth_current_has_unknown_gpu_evidence(self):
+        props = PropsSnapshot.from_payload(json.loads(load_fixture("props_unsloth_current.json")))
+        self.assertEqual(gpu_evidence(self._with(props)), GpuEvidence("unknown", None))
 
 
 if __name__ == "__main__":

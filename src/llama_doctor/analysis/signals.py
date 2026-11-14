@@ -11,6 +11,27 @@ HIGH_CACHE_HIT_RATIO = 0.5
 
 
 @dataclass(frozen=True)
+class GpuEvidence:
+    status: str  # "gpu" | "cpu" | "unknown"
+    source: str | None  # "props.n_gpu_layers" | "hint.vram_gib" | None
+
+
+def gpu_evidence(ctx: DiagnosisContext) -> GpuEvidence:
+    layers = ctx.props.n_gpu_layers if ctx.props is not None else None
+    if layers is not None and layers >= 1:
+        return GpuEvidence("gpu", "props.n_gpu_layers")
+    vram = ctx.hints.vram_gib
+    if vram is not None and math.isfinite(vram):
+        if vram > 0:
+            return GpuEvidence("gpu", "hint.vram_gib")
+        if vram == 0:
+            return GpuEvidence("cpu", "hint.vram_gib")
+    if layers == 0:
+        return GpuEvidence("cpu", "props.n_gpu_layers")
+    return GpuEvidence("unknown", None)
+
+
+@dataclass(frozen=True)
 class Rate:
     value: float
     source: str

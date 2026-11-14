@@ -134,6 +134,10 @@ class TestPropsSnapshot(unittest.TestCase):
             ("n_ctx", "modalities"),
         )
 
+    def test_props_unsloth_current_resolves_n_ctx(self):
+        snap = self.props_from_fixture("props_unsloth_current.json")
+        self.assertEqual(snap.n_ctx, 80128)
+
     def test_props_never_hold_sentinels(self):
         for name in ("props_full.json", "props_unsloth_minimal.json"):
             snap = self.props_from_fixture(name)
