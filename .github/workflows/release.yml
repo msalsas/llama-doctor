@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/llama-doctor/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Tag matches packaged version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test -f "dist/llama_doctor-${TAG#v}-py3-none-any.whl"
+          test -f "dist/llama_doctor-${TAG#v}.tar.gz"
+      - uses: pypa/gh-action-pypi-publish@release/v1
