@@ -4,6 +4,7 @@
 
 A command-line tool that reads a running llama.cpp or Unsloth Studio server's metrics and tells you what is misconfigured.
 
+[![PyPI](https://img.shields.io/pypi/v/llama-doctor.svg)](https://pypi.org/project/llama-doctor/)
 [![CI](https://github.com/msalsas/llama-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/msalsas/llama-doctor/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -28,7 +29,7 @@ Requires Python 3.10 or newer. There are no runtime dependencies; it uses the st
 
 The recommended way is [pipx](https://pipx.pypa.io/), which installs the command in its own environment:
 
-llama-doctor can be installed from PyPI starting with release v0.2.1; until that release is available, install it from source.
+llama-doctor is published on PyPI and installs with pipx or pip.
 
 ```sh
 pipx install llama-doctor
