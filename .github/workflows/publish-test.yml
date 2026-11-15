@@ -1,0 +1,29 @@
+name: Publish to TestPyPI
+
+# Manual rehearsal of the release pipeline against TestPyPI. The trusted
+# publisher on test.pypi.org pins this workflow file and the pypi-test
+# environment; production releases stay in release.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: pypi-test
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
