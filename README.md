@@ -188,11 +188,13 @@ ruff check src tests
 To check the package the way CI does:
 
 ```sh
-pip install build "twine>=6.1"
+pip install "build>=1.2" "twine>=6.1"
 python3 -m build
 python3 -m twine check --strict dist/*
 python3 -I scripts/check_dist.py dist
 ```
+
+Note: `scripts/check_dist.py` is POSIX-only (it uses `venv/bin` paths).
 
 Pull requests are welcome.
 
