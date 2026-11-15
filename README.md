@@ -28,6 +28,8 @@ Requires Python 3.10 or newer. There are no runtime dependencies; it uses the st
 
 The recommended way is [pipx](https://pipx.pypa.io/), which installs the command in its own environment:
 
+llama-doctor can be installed from PyPI starting with release v0.2.1; until that release is available, install it from source.
+
 ```sh
 pipx install llama-doctor
 ```
