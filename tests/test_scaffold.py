@@ -13,7 +13,7 @@ PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 class TestScaffold(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(llama_doctor.__version__, "0.2.0")
+        self.assertEqual(llama_doctor.__version__, "0.2.1")
 
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_pyproject_takes_version_from_package(self):
