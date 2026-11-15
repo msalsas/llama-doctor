@@ -10,6 +10,29 @@ authors = [{name = "Manolo Salsas"}]
 license = "MIT"
 requires-python = ">=3.10"
 dependencies = []
+readme = "README.md"
+keywords = ["llama.cpp", "llm", "inference", "diagnostics", "metrics", "prometheus", "cli", "gguf"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Monitoring",
+]
+
+[project.urls]
+Homepage = "https://github.com/msalsas/llama-doctor"
+Repository = "https://github.com/msalsas/llama-doctor"
+Issues = "https://github.com/msalsas/llama-doctor/issues"
 
 [project.scripts]
 llama-doctor = "llama_doctor.cli:main"

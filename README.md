@@ -26,6 +26,26 @@ It works with llama.cpp's server and forks that expose the same `llamacpp:` metr
 
 Requires Python 3.10 or newer. There are no runtime dependencies; it uses the standard library only.
 
+The recommended way is [pipx](https://pipx.pypa.io/), which installs the command in its own environment:
+
+llama-doctor can be installed from PyPI starting with release v0.2.1; until that release is available, install it from source.
+
+```sh
+pipx install llama-doctor
+```
+
+Or with pip, ideally inside a virtual environment:
+
+```sh
+pip install llama-doctor
+```
+
+Check the install with `llama-doctor --version`.
+
+### From source
+
+For development, or to run unreleased changes:
+
 ```sh
 git clone https://github.com/msalsas/llama-doctor.git
 cd llama-doctor
@@ -166,6 +186,17 @@ pip install -e . ruff
 python3 -m unittest discover -v
 ruff check src tests
 ```
+
+To check the package the way CI does:
+
+```sh
+pip install "build>=1.2" "twine>=6.1"
+python3 -m build
+python3 -m twine check --strict dist/*
+python3 -I scripts/check_dist.py dist
+```
+
+Note: `scripts/check_dist.py` is POSIX-only (it uses `venv/bin` paths).
 
 Pull requests are welcome.
 
